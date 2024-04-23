@@ -1,5 +1,7 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:main/Screens/login.dart';
 
 class LandingScreen extends StatelessWidget {
@@ -7,6 +9,8 @@ class LandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final CoordinatesController coordinatesController =
+        Get.put(CoordinatesController());
     return Scaffold(
       body: SizedBox(
         width: MediaQuery.of(context).size.width,
@@ -124,8 +128,22 @@ class LandingScreen extends StatelessWidget {
               left: 20,
               right: 20,
               child: ElevatedButton(
-                onPressed: () {
-                  Get.to(() => const LoginScreen());
+                onPressed: () async {
+                  Get.to(() => LoginScreen());
+                  final databaseReference = FirebaseDatabase.instance.ref();
+                  final coordinatesSnapshot =
+                      await databaseReference.child('gps_coordinates').once();
+                  final coordinatesData = coordinatesSnapshot.snapshot.value
+                      as Map<dynamic, dynamic>?;
+                  if (coordinatesData != null) {
+                    final coordinates = coordinatesData.entries
+                        .map((entry) => LatLng(
+                              entry.value['latitude'] as double,
+                              entry.value['longitude'] as double,
+                            ))
+                        .toList();
+                    coordinatesController.setCoordinates(coordinates);
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   padding:
@@ -149,5 +167,13 @@ class LandingScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class CoordinatesController extends GetxController {
+  RxList<LatLng> coordinates = <LatLng>[].obs;
+
+  void setCoordinates(List<LatLng> newCoordinates) {
+    coordinates.assignAll(newCoordinates);
   }
 }

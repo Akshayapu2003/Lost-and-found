@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
 import 'package:main/Screens/route.dart';
 import 'package:main/constants/constants.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:sensors/sensors.dart';
 
 class ItemScreen extends StatefulWidget {
@@ -21,20 +21,19 @@ class _ItemScreenState extends State<ItemScreen> {
   StreamSubscription<ScanResult>? scanSubscription;
   BluetoothDevice? esp32Device;
   BluetoothCharacteristic? buzzerCharacteristic;
-  final DatabaseReference databaseReference = FirebaseDatabase.instance.ref();
   List<double> accelerometerValues = [0, 0, 0];
   List<double> gyroscopeValues = [0, 0, 0];
-
   double distance = 0.0;
   bool isBuzzerOn = false;
-  bool isLowSignalPromptShown = false;
   bool isScanning = false;
   bool isAppOpen = false;
+  bool isBluetoothPermissionGranted = false;
+  final databaseReference = FirebaseDatabase.instance.ref();
+
   @override
   void initState() {
     super.initState();
-    _initializeApp();
-    startScan();
+    _requestBluetoothPermission();
     accelerometerEvents.listen((AccelerometerEvent event) {
       setState(() {
         accelerometerValues = [event.x, event.y, event.z];
@@ -48,30 +47,33 @@ class _ItemScreenState extends State<ItemScreen> {
     });
   }
 
-  Future<void> _initializeApp() async {
-    await Firebase.initializeApp();
-    databaseReference.child('appSignal').onValue.listen((event) {
-      setState(() {
-        isAppOpen = event.snapshot.value == 'open';
-      });
-    });
-  }
-
-  void startScan() {
+  Future<void> _requestBluetoothPermission() async {
+    final permissionStatus = await Permission.bluetooth.request();
     setState(() {
-      isScanning = true;
+      isBluetoothPermissionGranted = permissionStatus.isGranted;
     });
-    scanSubscription = flutterBlue.scan().listen((scanResult) {
-      BluetoothDevice device = scanResult.device;
-      if (device.name == 'ESP32_GPS_BLE') {
+
+    if (isBluetoothPermissionGranted) {
+      void startScan() {
         setState(() {
-          esp32Device = device;
-          isScanning = false;
+          isScanning = true;
         });
-        updateDirectionalIndicators(scanResult.rssi);
-        updateDistance(scanResult.rssi);
+        scanSubscription = flutterBlue.scan().listen((scanResult) {
+          BluetoothDevice device = scanResult.device;
+          if (device.name == 'ESP32_GPS_BLE') {
+            setState(() {
+              esp32Device = device;
+              isScanning = false;
+            });
+            updateDirectionalIndicators(scanResult.rssi);
+            updateDistance(scanResult.rssi);
+          } else {
+            Get.to(
+                () => GoogleMapsScreen(databaseReference: databaseReference));
+          }
+        });
       }
-    });
+    }
   }
 
   void updateDirectionalIndicators(int esp32RSSI) {
@@ -95,9 +97,8 @@ class _ItemScreenState extends State<ItemScreen> {
         controlBuzzer(false);
         isBuzzerOn = false;
       }
-      if (!isLowSignalPromptShown) {
+      if (esp32RSSI < -60) {
         showSwitchToGPSPrompt();
-        isLowSignalPromptShown = true;
       }
     }
   }
@@ -146,15 +147,16 @@ class _ItemScreenState extends State<ItemScreen> {
         TextButton(
           onPressed: () {
             Get.back();
-
-            Get.to(() => GoogleMapsScreen(
-                  databaseReference: databaseReference,
-                ));
+            navigateToGPSScreen();
           },
           child: const Text('Switch to GPS'),
         ),
       ],
     );
+  }
+
+  void navigateToGPSScreen() {
+    Get.to(() => GoogleMapsScreen(databaseReference: databaseReference));
   }
 
   @override
@@ -265,8 +267,7 @@ class _ItemScreenState extends State<ItemScreen> {
 
                   Future.delayed(const Duration(seconds: 1), () {
                     Navigator.of(context).pop();
-                    Get.to(() =>
-                        GoogleMapsScreen(databaseReference: databaseReference));
+                    navigateToGPSScreen();
                   });
                 },
                 icon: const Icon(Icons.location_on_outlined),

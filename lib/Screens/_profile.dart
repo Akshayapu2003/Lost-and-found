@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:main/Functions/snackbar.dart';
 import 'package:main/Screens/login.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../GetxControllers/controllers.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -311,7 +312,7 @@ class ProfileScreen extends StatelessWidget {
   Future<void> logout(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signOut();
-      Get.offAll(const LoginScreen());
+      Get.offAll(LoginScreen());
       await saveUserDataToDatabase(
         name: userController.name.value,
         email: userController.email.value,
@@ -336,8 +337,8 @@ class ProfileScreen extends StatelessWidget {
         scheme: 'mailto',
         path: emailAddress,
         queryParameters: {'subject': 'Subject', 'body': 'Body'});
-    if (await canLaunch(emailLaunchUri.toString())) {
-      await launch(emailLaunchUri.toString());
+    if (await canLaunchUrlString(emailLaunchUri.toString())) {
+      await launchUrlString(emailLaunchUri.toString());
     } else {
       print('Could not launch $emailLaunchUri');
     }

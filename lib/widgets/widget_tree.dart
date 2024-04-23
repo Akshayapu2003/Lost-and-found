@@ -23,9 +23,24 @@ class _WidgetTreeState extends State<WidgetTree> {
       body: pages.elementAt(currentPage),
       bottomNavigationBar: NavigationBar(
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: "Home"),
-          NavigationDestination(icon: Icon(Icons.key), label: "Items"),
-          NavigationDestination(icon: Icon(Icons.person), label: "Profile"),
+          NavigationDestination(
+              icon: Icon(
+                Icons.home,
+                color: Colors.white,
+              ),
+              label: ""),
+          NavigationDestination(
+              icon: Icon(
+                Icons.location_on_outlined,
+                color: Colors.white,
+              ),
+              label: ""),
+          NavigationDestination(
+              icon: Icon(
+                Icons.person,
+                color: Colors.white,
+              ),
+              label: ""),
         ],
         selectedIndex: currentPage,
         onDestinationSelected: (int value) {
@@ -35,6 +50,8 @@ class _WidgetTreeState extends State<WidgetTree> {
             },
           );
         },
+        backgroundColor: const Color.fromARGB(255, 0, 0, 0),
+        height: 70,
       ),
     );
   }

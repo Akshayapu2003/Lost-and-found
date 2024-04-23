@@ -9,14 +9,14 @@ import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/widgets/widget_tree.dart';
 
 class LoginScreen extends StatelessWidget {
-  const LoginScreen({super.key});
+  LoginScreen({super.key});
+
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final UserController userController = Get.put(UserController());
 
   @override
   Widget build(BuildContext context) {
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    final UserController userController = Get.put(UserController());
-
     Future<void> loginUser(BuildContext context) async {
       try {
         final authMethods = FirebaseAuth.instance;

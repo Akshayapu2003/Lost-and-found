@@ -1,9 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue/flutter_blue.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:main/Functions/snackbar.dart';
+import 'package:main/GetxControllers/controllers.dart';
+import 'package:main/Screens/items.dart';
+import 'package:main/Screens/landing.dart';
 import 'package:main/constants/constants.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -18,14 +24,15 @@ class GoogleMapsScreen extends StatefulWidget {
 }
 
 class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
-  LatLng? currentPosition;
-  List<LatLng> coordinates = [];
   final Completer<GoogleMapController> _mapController =
       Completer<GoogleMapController>();
-  Map<PolylineId, Polyline> polylines = {};
-
-  double distance = 0.0;
-  String estimatedTime = '';
+  final Set<Polyline> _polylines = {};
+  double _distance = 0.0;
+  final UserController _userController = Get.find<UserController>();
+  final FlutterTts _flutterTts = FlutterTts();
+  final CoordinatesController _coordinatesController =
+      Get.find<CoordinatesController>();
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -37,25 +44,11 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     try {
       await Firebase.initializeApp();
       await _getCurrentLocation();
-      await getCoordinatesFromDatabase();
-      final gcoordinates = await getPolyLinePoints();
-      generatePolylineFromPoints(gcoordinates);
-      calculateDistanceAndTime();
+      fetchPolylinePoints();
+      calculateDistance();
+      speakDistance();
     } catch (e) {
       showSnackBar(context, 'Error initializing app: $e');
-    }
-  }
-
-  void calculateDistanceAndTime() {
-    if (currentPosition != null && coordinates.isNotEmpty) {
-      setState(() {
-        distance = Geolocator.distanceBetween(
-          currentPosition!.latitude,
-          currentPosition!.longitude,
-          coordinates.last.latitude,
-          coordinates.last.longitude,
-        );
-      });
     }
   }
 
@@ -71,128 +64,146 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+          desiredAccuracy: LocationAccuracy.medium);
 
-      setState(() {
-        currentPosition = LatLng(position.latitude, position.longitude);
-      });
+      _userController
+          .setCurrentLocation(LatLng(position.latitude, position.longitude));
+      _updateCameraPosition(_userController.currentPosition.value!);
     } catch (e) {
       showSnackBar(context, 'Error fetching current location: $e');
     }
   }
 
-  Future<void> getCoordinatesFromDatabase() async {
-    try {
-      final event =
-          await widget.databaseReference.child('gps_coordinates').once();
-      final snapshot = event.snapshot;
-      final values = snapshot.value as Map<dynamic, dynamic>?;
-      if (values != null) {
-        final coordinatesList = values.entries
-            .map((entry) => LatLng(
-                  entry.value['latitude'] as double,
-                  entry.value['longitude'] as double,
-                ))
-            .toList();
-
-        setState(() {
-          coordinates = coordinatesList;
-        });
-      }
-    } catch (e) {
-      showSnackBar(context, 'Error fetching coordinates: $e');
-    }
-  }
-
-  Future<List<LatLng>> getPolyLinePoints() async {
-    final polylinecoordinates = <LatLng>[];
-    final polylinePoints = PolylinePoints();
-    final result = await polylinePoints.getRouteBetweenCoordinates(
-      GOOGLE_MAPS_API_KEY,
-      PointLatLng(currentPosition!.latitude, currentPosition!.longitude),
-      PointLatLng(coordinates.last.latitude, coordinates.last.longitude),
-      travelMode: TravelMode.driving,
-    );
-    if (result.points.isNotEmpty) {
-      for (final point in result.points) {
-        polylinecoordinates.add(LatLng(point.latitude, point.longitude));
-      }
-    } else {
-      print(result.errorMessage);
-    }
-    return polylinecoordinates;
-  }
-
-  void generatePolylineFromPoints(List<LatLng> polylinecoordinates) async {
-    const id = PolylineId("poly");
-    final polyline = Polyline(
-      polylineId: id,
-      color: Colors.blue,
-      points: polylinecoordinates,
-      width: 10,
-    );
-    setState(() {
-      polylines[id] = polyline;
-    });
-  }
-
-  Future<void> _cameraPosition(LatLng pos) async {
+  void _updateCameraPosition(LatLng position) async {
     final controller = await _mapController.future;
-    if (currentPosition != null) {
-      final newCameraPosition = CameraPosition(
-        target: pos,
-        zoom: 5,
-      );
+    if (_userController.currentPosition.value != null) {
+      final newCameraPosition = CameraPosition(target: position, zoom: 15);
       await controller
           .animateCamera(CameraUpdate.newCameraPosition(newCameraPosition));
     }
   }
 
+  Future<void> fetchPolylinePoints() async {
+    try {
+      final polylinePoints = PolylinePoints();
+      final result = await polylinePoints.getRouteBetweenCoordinates(
+        GOOGLE_MAPS_API_KEY,
+        PointLatLng(_userController.currentPosition.value!.latitude,
+            _userController.currentPosition.value!.longitude),
+        PointLatLng(_coordinatesController.coordinates.last.latitude,
+            _coordinatesController.coordinates.last.longitude),
+        travelMode: TravelMode.driving,
+      );
+      if (result.points.isNotEmpty) {
+        setState(() {
+          _polylines.add(Polyline(
+            polylineId: const PolylineId("poly"),
+            color: Colors.blue,
+            points: result.points
+                .map((point) => LatLng(point.latitude, point.longitude))
+                .toList(),
+            width: 10,
+          ));
+          _isLoading = false;
+        });
+      } else {
+        throw 'No polyline points found';
+      }
+    } catch (e) {
+      print('Error fetching polyline points: $e');
+    }
+  }
+
+  void calculateDistance() {
+    if (_userController.currentPosition.value != null &&
+        _coordinatesController.coordinates.isNotEmpty) {
+      setState(() {
+        _distance = Geolocator.distanceBetween(
+          _userController.currentPosition.value!.latitude,
+          _userController.currentPosition.value!.longitude,
+          _coordinatesController.coordinates.last.latitude,
+          _coordinatesController.coordinates.last.longitude,
+        );
+      });
+    }
+  }
+
+  Future<void> speakDistance() async {
+    await _flutterTts.speak(
+        "Distance to destination: ${(_distance / 1000).toStringAsFixed(2)} kilometers");
+  }
+
+  void startScanAndNavigateToItemScreen() {
+    FlutterBlue flutterBlue = FlutterBlue.instance;
+    StreamSubscription<ScanResult>? scanSubscription;
+    scanSubscription = flutterBlue.scan().listen((scanResult) {
+      BluetoothDevice device = scanResult.device;
+      if (device.name == 'ESP32_GPS_BLE') {
+        Get.to(() => const ItemScreen());
+        scanSubscription?.cancel();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final targetLatLng = currentPosition ?? const LatLng(10.9035, 76.4352);
+    final targetLatLng =
+        _userController.currentPosition.value ?? const LatLng(10.1632, 76.6413);
 
     return Scaffold(
       body: Column(
         children: [
           Expanded(
-            child: GoogleMap(
-              onMapCreated: (controller) {
-                _mapController.complete(controller);
-              },
-              initialCameraPosition: CameraPosition(
-                target: targetLatLng,
-                zoom: 15,
-              ),
-              markers: {
-                Marker(
-                  markerId: const MarkerId('Current Location'),
-                  icon: BitmapDescriptor.defaultMarker,
-                  position: targetLatLng,
-                ),
-                if (coordinates.isNotEmpty)
-                  Marker(
-                    markerId: const MarkerId('Device Location'),
-                    icon: BitmapDescriptor.defaultMarker,
-                    position: coordinates.last,
+            child: Stack(
+              children: [
+                if (_isLoading)
+                  const Center(
+                    child: Text(
+                      "Finding Best Route",
+                      style: TextStyle(
+                        color: Colors.black54,
+                        fontFamily: "Enriqueta",
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-              },
-              polylines: Set<Polyline>.of(polylines.values),
+                GoogleMap(
+                  onMapCreated: (controller) {
+                    _mapController.complete(controller);
+                  },
+                  initialCameraPosition:
+                      CameraPosition(target: targetLatLng, zoom: 5),
+                  markers: {
+                    Marker(
+                        markerId: const MarkerId('Current Location'),
+                        icon: BitmapDescriptor.defaultMarker,
+                        position: targetLatLng),
+                    if (_coordinatesController.coordinates.isNotEmpty)
+                      Marker(
+                          markerId: const MarkerId('Device Location'),
+                          icon: BitmapDescriptor.defaultMarker,
+                          position: _coordinatesController.coordinates.last),
+                  },
+                  polylines: _polylines,
+                ),
+              ],
             ),
           ),
           Container(
             color: Colors.black,
-            height: 50,
+            height: 60,
             width: MediaQuery.of(context).size.width,
-            padding: const EdgeInsets.only(left: 20),
-            child: Text(
-              'Distance to destination: ${(distance / 1000).toStringAsFixed(2)} km\n',
-              style: const TextStyle(
-                fontFamily: "Enriqueta",
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
+            padding: const EdgeInsets.only(top: 20),
+            child: Center(
+              child: Text(
+                'Distance to destination: ${(_distance / 1000).toStringAsFixed(2)} km\n',
+                style: const TextStyle(
+                  fontFamily: "Enriqueta",
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),

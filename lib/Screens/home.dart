@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -15,7 +17,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late GoogleMapController mapController;
+  final Completer<GoogleMapController> mapController =
+      Completer<GoogleMapController>();
   final UserController userController = Get.find<UserController>();
 
   @override
@@ -46,21 +49,41 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      Position position = await Geolocator.getCurrentPosition(
+      Position positionLowAccuracy = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+      userController.setCurrentLocation(
+          LatLng(positionLowAccuracy.latitude, positionLowAccuracy.longitude));
+      updateCameraPosition(userController.currentPosition.value!);
+
+      Position positionHighAccuracy = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      userController.setCurrentLocation(position);
+      userController.setCurrentLocation(LatLng(
+          positionHighAccuracy.latitude, positionHighAccuracy.longitude));
     } catch (e) {
       print('Error: $e');
       showErrorDialog(context, 'Error getting the current location.', 'Error');
     }
   }
 
+  void updateCameraPosition(LatLng position) async {
+    final controller = await mapController.future;
+    if (userController.currentPosition.value != null) {
+      final newCameraPosition = CameraPosition(
+        target: position,
+        zoom: 15,
+      );
+      await controller
+          .animateCamera(CameraUpdate.newCameraPosition(newCameraPosition));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
+    final targetLatLng =
+        userController.currentPosition.value ?? const LatLng(10.1632, 76.6413);
+    return Scaffold(
         appBar: AppBar(
           backgroundColor: Colors.black,
           title: const Text(
@@ -74,38 +97,22 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           elevation: 2,
         ),
-        body: userController.currentPosition.value != null
-            ? GoogleMap(
-                onMapCreated: _onMapCreated,
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(
-                    userController.currentPosition.value!.latitude,
-                    userController.currentPosition.value!.longitude,
-                  ),
-                  zoom: 15.0,
-                ),
-                markers: {
-                  Marker(
-                    markerId: const MarkerId('Current Location'),
-                    icon: BitmapDescriptor.defaultMarker,
-                    position: LatLng(
-                      userController.currentPosition.value!.latitude,
-                      userController.currentPosition.value!.longitude,
-                    ),
-                  ),
-                },
-                myLocationEnabled: true,
-              )
-            : const Center(
-                child: CircularProgressIndicator(),
-              ),
-      ),
-    );
-  }
-
-  void _onMapCreated(GoogleMapController controller) {
-    setState(() {
-      mapController = controller;
-    });
+        body: GoogleMap(
+          onMapCreated: (controller) {
+            mapController.complete(controller);
+          },
+          initialCameraPosition: CameraPosition(
+            target: targetLatLng,
+            zoom: 5.0,
+          ),
+          markers: {
+            Marker(
+              markerId: const MarkerId('Current Location'),
+              icon: BitmapDescriptor.defaultMarker,
+              position: targetLatLng,
+            ),
+          },
+          myLocationEnabled: true,
+        ));
   }
 }
