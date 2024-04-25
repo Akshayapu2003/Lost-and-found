@@ -86,6 +86,7 @@ class _ItemScreenState extends State<ItemScreen> {
           esp32Device = device;
           isScanning = false;
         });
+        _connectToDevice(device);
         _updateDirectionalIndicators(scanResult.rssi);
         _updateDistance(scanResult.rssi);
       }
@@ -95,6 +96,17 @@ class _ItemScreenState extends State<ItemScreen> {
         isScanning = false;
       });
     });
+  }
+
+  void _connectToDevice(BluetoothDevice device) async {
+    try {
+      await device.connect();
+      // Connection successful, send the unique ID
+      sendUniqueId(uniqueId);
+    } catch (e) {
+      print('Error connecting to device: $e');
+      // Handle connection error
+    }
   }
 
   void _updateDirectionalIndicators(int esp32RSSI) {
