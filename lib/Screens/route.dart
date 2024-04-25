@@ -16,8 +16,10 @@ import 'package:firebase_database/firebase_database.dart';
 
 class GoogleMapsScreen extends StatefulWidget {
   final DatabaseReference databaseReference;
+  final String uuid;
 
-  const GoogleMapsScreen({super.key, required this.databaseReference});
+  const GoogleMapsScreen(
+      {super.key, required this.databaseReference, required this.uuid});
 
   @override
   State<GoogleMapsScreen> createState() => _GoogleMapsScreenState();
@@ -80,6 +82,26 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       final newCameraPosition = CameraPosition(target: position, zoom: 15);
       await controller
           .animateCamera(CameraUpdate.newCameraPosition(newCameraPosition));
+    }
+  }
+
+  Future<void> _fetchCoordinatesFromFirebase() async {
+    try {
+      final coordinatesSnapshot = await widget.databaseReference
+          .child(widget.uuid)
+          .child('gps_coordinates')
+          .once();
+      final coordinatesData =
+          coordinatesSnapshot.snapshot.value as Map<dynamic, dynamic>?;
+      if (coordinatesData != null) {
+        final coordinates = coordinatesData.entries
+            .map((entry) => LatLng(entry.value['latitude'] as double,
+                entry.value['longitude'] as double))
+            .toList();
+        _coordinatesController.setCoordinates(coordinates);
+      }
+    } catch (e) {
+      print('Error fetching coordinates from Firebase: $e');
     }
   }
 

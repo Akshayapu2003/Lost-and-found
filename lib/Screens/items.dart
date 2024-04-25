@@ -1,39 +1,47 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:convert';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
+import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/route.dart';
 import 'package:main/constants/constants.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sensors/sensors.dart';
+import 'dart:math';
 
 class ItemScreen extends StatefulWidget {
-  const ItemScreen({super.key});
+  const ItemScreen({
+    super.key,
+  });
 
   @override
   _ItemScreenState createState() => _ItemScreenState();
 }
 
 class _ItemScreenState extends State<ItemScreen> {
-  FlutterBlue flutterBlue = FlutterBlue.instance;
+  final FlutterBlue flutterBlue = FlutterBlue.instance;
   StreamSubscription<ScanResult>? scanSubscription;
   BluetoothDevice? esp32Device;
   BluetoothCharacteristic? buzzerCharacteristic;
+  BluetoothCharacteristic? uuidCharacteristic;
   List<double> accelerometerValues = [0, 0, 0];
   List<double> gyroscopeValues = [0, 0, 0];
   double distance = 0.0;
   bool isBuzzerOn = false;
   bool isScanning = false;
-  bool isAppOpen = false;
   bool isBluetoothPermissionGranted = false;
   final databaseReference = FirebaseDatabase.instance.ref();
+  bool serviceFound = false;
+  bool characteristicFound = false;
+  final UserController userController = Get.find<UserController>();
+  String uniqueId = '';
 
   @override
   void initState() {
     super.initState();
-    _requestBluetoothPermission();
+    _checkBluetoothStatus();
     accelerometerEvents.listen((AccelerometerEvent event) {
       setState(() {
         accelerometerValues = [event.x, event.y, event.z];
@@ -47,6 +55,15 @@ class _ItemScreenState extends State<ItemScreen> {
     });
   }
 
+  Future<void> _checkBluetoothStatus() async {
+    bool isBluetoothEnabled = await flutterBlue.isOn;
+    if (isBluetoothEnabled) {
+      _requestBluetoothPermission();
+    } else {
+      _showBluetoothDialog();
+    }
+  }
+
   Future<void> _requestBluetoothPermission() async {
     final permissionStatus = await Permission.bluetooth.request();
     setState(() {
@@ -54,38 +71,42 @@ class _ItemScreenState extends State<ItemScreen> {
     });
 
     if (isBluetoothPermissionGranted) {
-      void startScan() {
-        setState(() {
-          isScanning = true;
-        });
-        scanSubscription = flutterBlue.scan().listen((scanResult) {
-          BluetoothDevice device = scanResult.device;
-          if (device.name == 'ESP32_GPS_BLE') {
-            setState(() {
-              esp32Device = device;
-              isScanning = false;
-            });
-            updateDirectionalIndicators(scanResult.rssi);
-            updateDistance(scanResult.rssi);
-          } else {
-            Get.to(
-                () => GoogleMapsScreen(databaseReference: databaseReference));
-          }
-        });
-      }
+      startScan();
     }
   }
 
-  void updateDirectionalIndicators(int esp32RSSI) {
+  void startScan() {
+    setState(() {
+      isScanning = true;
+    });
+    scanSubscription = flutterBlue.scan().listen((scanResult) {
+      BluetoothDevice device = scanResult.device;
+      if (device.name == 'ESP32_GPS_BLE') {
+        setState(() {
+          esp32Device = device;
+          isScanning = false;
+        });
+        _updateDirectionalIndicators(scanResult.rssi);
+        _updateDistance(scanResult.rssi);
+      }
+    }, onError: (error) {
+      print('Error during scanning: $error');
+      setState(() {
+        isScanning = false;
+      });
+    });
+  }
+
+  void _updateDirectionalIndicators(int esp32RSSI) {
     double accelerationMagnitude =
         accelerometerValues.map((e) => e * e).reduce((a, b) => a + b);
     double orientation = gyroscopeValues[0];
-
+    uniqueId = userController.uuid.value;
     if (esp32RSSI > -60) {
       if (!isBuzzerOn) {
-        controlBuzzer(true);
+        _controlBuzzer(true);
         isBuzzerOn = true;
-        showSnackbar('Buzzer activated due to strong signal strength');
+        _showSnackbar('Buzzer activated due to strong signal strength');
       }
       if (accelerationMagnitude > 20 && orientation > 0) {
         print('Device is moving forward');
@@ -94,16 +115,38 @@ class _ItemScreenState extends State<ItemScreen> {
       }
     } else {
       if (isBuzzerOn) {
-        controlBuzzer(false);
+        _controlBuzzer(false);
         isBuzzerOn = false;
       }
-      if (esp32RSSI < -60) {
-        showSwitchToGPSPrompt();
+      if (esp32Device != null) {
+        esp32Device!.discoverServices().then((services) {
+          for (var service in services) {
+            if (service.uuid.toString() == bleCharac) {
+              serviceFound = true;
+              for (var characteristic in service.characteristics) {
+                if (characteristic.uuid.toString() == buzzerCharc) {
+                  characteristicFound = true;
+                  buzzerCharacteristic = characteristic;
+                }
+                if (characteristic.uuid.toString() == uuidCharc) {
+                  uuidCharacteristic = characteristic;
+                }
+              }
+            }
+          }
+          if (serviceFound && characteristicFound) {
+            sendUniqueId(uniqueId);
+          }
+          if (!characteristicFound) {
+            print('Buzzer characteristic not found');
+            _showSwitchToGPSPrompt();
+          }
+        });
       }
     }
   }
 
-  void updateDistance(int esp32RSSI) {
+  void _updateDistance(int esp32RSSI) {
     double rssiAt1Meter = -60.0;
     double n = 2.0;
     double calculatedDistance =
@@ -114,26 +157,27 @@ class _ItemScreenState extends State<ItemScreen> {
     });
   }
 
-  Future<void> controlBuzzer(bool isOn) async {
-    if (esp32Device != null) {
-      List<BluetoothService> services = await esp32Device!.discoverServices();
-      for (var service in services) {
-        service.characteristics.forEach((characteristic) async {
-          if (characteristic.uuid.toString() == buzzerCharc) {
-            List<int> command = [isOn ? 1 : 0];
-            await characteristic.write(command);
-            print('Buzzer is ${isOn ? 'on' : 'off'}');
-          }
-        });
-      }
+  Future<void> _controlBuzzer(bool isOn) async {
+    if (esp32Device != null && buzzerCharacteristic != null) {
+      List<int> command = [isOn ? 1 : 0];
+      await buzzerCharacteristic!.write(command);
+      print('Buzzer is ${isOn ? 'on' : 'off'}');
     }
   }
 
-  void showSnackbar(String message) {
+  Future<void> sendUniqueId(String id) async {
+    if (mounted && esp32Device != null && uuidCharacteristic != null) {
+      List<int> idBytes = utf8.encode(id);
+      await uuidCharacteristic!.write(idBytes);
+      print('Unique ID sent: $id');
+    }
+  }
+
+  void _showSnackbar(String message) {
     Get.snackbar('Buzzer Activated', message);
   }
 
-  void showSwitchToGPSPrompt() {
+  void _showSwitchToGPSPrompt() {
     Get.defaultDialog(
       title: 'Signal Strength Low',
       middleText: 'Switch to GPS for accurate navigation?',
@@ -147,7 +191,7 @@ class _ItemScreenState extends State<ItemScreen> {
         TextButton(
           onPressed: () {
             Get.back();
-            navigateToGPSScreen();
+            _navigateToGPSScreen();
           },
           child: const Text('Switch to GPS'),
         ),
@@ -155,8 +199,31 @@ class _ItemScreenState extends State<ItemScreen> {
     );
   }
 
-  void navigateToGPSScreen() {
-    Get.to(() => GoogleMapsScreen(databaseReference: databaseReference));
+  void _navigateToGPSScreen() {
+    Get.to(() => GoogleMapsScreen(
+          databaseReference: databaseReference,
+          uuid: uniqueId,
+        ));
+  }
+
+  void _showBluetoothDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Bluetooth Required'),
+          content: const Text('Please enable Bluetooth to use this feature.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Get.back();
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -267,7 +334,7 @@ class _ItemScreenState extends State<ItemScreen> {
 
                   Future.delayed(const Duration(seconds: 1), () {
                     Navigator.of(context).pop();
-                    navigateToGPSScreen();
+                    _navigateToGPSScreen();
                   });
                 },
                 icon: const Icon(Icons.location_on_outlined),
@@ -280,7 +347,7 @@ class _ItemScreenState extends State<ItemScreen> {
                     color: Colors.white,
                   ),
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -301,11 +368,5 @@ class _ItemScreenState extends State<ItemScreen> {
       yield distance;
       await Future.delayed(const Duration(milliseconds: 500));
     }
-  }
-
-  @override
-  void dispose() {
-    scanSubscription?.cancel();
-    super.dispose();
   }
 }

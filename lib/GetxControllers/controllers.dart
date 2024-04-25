@@ -10,6 +10,7 @@ class UserController extends GetxController {
   Rx<File?> image = Rx<File?>(null);
   Rx<LatLng?> currentPosition = Rx<LatLng?>(null);
   RxBool isOnItemScreen = false.obs;
+  RxString uuid = ''.obs;
 
   RxString get gName => name;
   RxString get gemail => email;
@@ -48,5 +49,10 @@ class UserController extends GetxController {
 
   void setIsOnItemScreen(bool value) {
     isOnItemScreen.value = value;
+  }
+
+  void setUUID(String value) {
+    uuid.value = value;
+    update();
   }
 }

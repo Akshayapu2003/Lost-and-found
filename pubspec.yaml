@@ -47,6 +47,7 @@ dependencies:
   sensors: ^2.0.3
   sensors_plus: ^5.0.1
   url_launcher: ^6.2.5
+  uuid: ^4.4.0
 
 dev_dependencies:
   flutter_lints: ^3.0.1

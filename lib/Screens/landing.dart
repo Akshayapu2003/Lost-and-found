@@ -2,7 +2,9 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/login.dart';
+import 'package:uuid/uuid.dart';
 
 class LandingScreen extends StatelessWidget {
   const LandingScreen({super.key});
@@ -11,6 +13,10 @@ class LandingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final CoordinatesController coordinatesController =
         Get.put(CoordinatesController());
+    final UserController userController = Get.find<UserController>();
+    const uuid = Uuid();
+    String uniqueId = uuid.v4();
+    userController.setUUID(uniqueId);
     return Scaffold(
       body: SizedBox(
         width: MediaQuery.of(context).size.width,
@@ -131,8 +137,10 @@ class LandingScreen extends StatelessWidget {
                 onPressed: () async {
                   Get.to(() => LoginScreen());
                   final databaseReference = FirebaseDatabase.instance.ref();
-                  final coordinatesSnapshot =
-                      await databaseReference.child('gps_coordinates').once();
+                  final coordinatesSnapshot = await databaseReference
+                      .child(uniqueId)
+                      .child('gps_coordinates')
+                      .once();
                   final coordinatesData = coordinatesSnapshot.snapshot.value
                       as Map<dynamic, dynamic>?;
                   if (coordinatesData != null) {
