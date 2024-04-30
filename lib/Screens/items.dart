@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
 import 'package:main/Functions/show_dialog_signout.dart';
+import 'package:main/Functions/snackbar.dart';
 import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/route.dart';
 import 'package:main/constants/constants.dart';
@@ -13,7 +14,9 @@ import 'package:sensors/sensors.dart';
 import 'dart:math';
 
 class ItemScreen extends StatefulWidget {
-  const ItemScreen({super.key});
+  const ItemScreen({
+    super.key,
+  });
 
   @override
   _ItemScreenState createState() => _ItemScreenState();
@@ -32,15 +35,15 @@ class _ItemScreenState extends State<ItemScreen> {
   bool isScanning = false;
   bool isBluetoothPermissionGranted = false;
   bool isScanPermissionGranted = false;
+  bool isLocationPermissionGranted = false;
   bool isConnectPermissionGranted = false;
-  bool isCoarseLocationPermissionGranted = false;
+  bool isCoarsePermissionGranted = false;
   final databaseReference = FirebaseDatabase.instance.ref();
   bool serviceFound = false;
   bool characteristicFound = false;
   final UserController userController = Get.find<UserController>();
   String uniqueId = '';
   int esp32RSSI = 0;
-
   @override
   void initState() {
     super.initState();
@@ -75,74 +78,26 @@ class _ItemScreenState extends State<ItemScreen> {
   }
 
   Future<void> _requestBluetoothPermission() async {
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.bluetooth,
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
+    final scanPermissionStatus = await Permission.bluetoothScan.request();
+    final connectPermissionStatus = await Permission.bluetoothConnect.request();
 
-    if (statuses.values.every((status) => status.isGranted)) {
-      startScan();
-    } else {
-      _showPermissionRequestDialog(statuses);
+    if (!scanPermissionStatus.isGranted) {
+      showSnackBar(context, "Bluetooth Scanning Permission is not granted");
     }
-  }
-
-  void _showPermissionRequestDialog(Map<Permission, PermissionStatus> statuses) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Grant Permissions'),
-          content: const Text('This app requires the following permissions to function properly:'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Map<Permission, PermissionStatus> updatedStatuses = await openAppSettings().then((_) async {
-                  return await [
-                    Permission.bluetooth,
-                    Permission.bluetoothScan,
-                    Permission.bluetoothConnect,
-                    Permission.locationWhenInUse,
-                  ].request();
-                });
-
-                if (updatedStatuses.values.every((status) => status.isGranted)) {
-                  if (mounted) {
-                    setState(() {
-                      isBluetoothPermissionGranted = updatedStatuses[Permission.bluetooth]!.isGranted;
-                      isScanPermissionGranted = updatedStatuses[Permission.bluetoothScan]!.isGranted;
-                      isConnectPermissionGranted = updatedStatuses[Permission.bluetoothConnect]!.isGranted;
-                      isCoarseLocationPermissionGranted = updatedStatuses[Permission.locationWhenInUse]!.isGranted;
-                    });
-                  }
-                  startScan();
-                  Navigator.of(context).pop();
-                } else {
-                  _showPermissionDeniedDialog();
-                }
-              },
-              child: const Text('Grant Permissions'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showPermissionDeniedDialog() {
-    showErrorDialog(
-      context,
-      'Please grant all required permissions to use this feature.',
-      'Permissions Denied',
-    );
+    if (!connectPermissionStatus.isGranted) {
+      showSnackBar(context, "Bluetooth Connection Permission is not granted");
+    }
+    final allPermissionsGranted =
+        scanPermissionStatus.isGranted && connectPermissionStatus.isGranted;
+    if (mounted) {
+      setState(() {
+        isScanPermissionGranted = scanPermissionStatus.isGranted;
+        isConnectPermissionGranted = connectPermissionStatus.isGranted;
+      });
+    }
+    if (allPermissionsGranted) {
+      startScan();
+    }
   }
 
   void startScan() {
@@ -151,48 +106,40 @@ class _ItemScreenState extends State<ItemScreen> {
         isScanning = true;
       });
     }
-    scanSubscription = flutterBlue.scan().listen(
-      (scanResult) {
-        BluetoothDevice device = scanResult.device;
-        if (device.name == 'ESP32-BLE-Server') {
-          if (!mounted) return;
+    scanSubscription = flutterBlue.scan().listen((scanResult) {
+      BluetoothDevice device = scanResult.device;
+      if (device.name == 'ESP32-BLE-Server') {
+        if (mounted) {
           setState(() {
             esp32RSSI = scanResult.rssi;
             esp32Device = device;
             isScanning = false;
           });
-          _connectToDevice(device);
-          _updateDirectionalIndicators(scanResult.rssi);
-          _updateDistance(scanResult.rssi);
         }
-      },
-      onError: (error) {
-        print('Error during scanning: $error');
-        if (mounted) {
-          setState(() {
-            isScanning = false;
-          });
-        }
-        showErrorDialog(
-          context,
-          'An error occurred during Bluetooth scanning: $error',
-          'Scanning Error',
-        );
-      },
-    );
+        _connectToDevice(device);
+        _updateDirectionalIndicators(scanResult.rssi);
+        _updateDistance(scanResult.rssi);
+      }
+    }, onError: (error) {
+      print('Error during scanning: $error');
+      if (mounted) {
+        setState(() {
+          isScanning = false;
+        });
+      }
+    });
   }
 
-  Future<void> _connectToDevice(BluetoothDevice device) async {
+  void _connectToDevice(BluetoothDevice device) async {
     try {
       await device.connect();
       sendUniqueId(uniqueId);
     } catch (e) {
       print('Error connecting to device: $e');
       showErrorDialog(
-        context,
-        'Failed to connect to the device. Please try again.',
-        'Connection Error',
-      );
+          context,
+          'Failed to connect to the device. Please try again.',
+          'Connection Error');
     }
   }
 
@@ -217,37 +164,9 @@ class _ItemScreenState extends State<ItemScreen> {
         _controlBuzzer(false);
         isBuzzerOn = false;
       }
-      if (esp32Device != null) {
-        esp32Device!.discoverServices().then((services) {
-          for (var service in services) {
-            if (service.uuid == Guid(bleCharac)) {
-              serviceFound = true;
-              for (var characteristic in service.characteristics) {
-                if (characteristic.uuid == Guid(buzzerCharc)) {
-                  characteristicFound = true;
-                  buzzerCharacteristic = characteristic;
-                }
-                if (characteristic.uuid == Guid(uuidCharc)) {
-                  uuidCharacteristic = characteristic;
-                }
-              }
-            }
-          }
-          if (serviceFound && characteristicFound) {
-            sendUniqueId(uniqueId);
-          }
-          if (!characteristicFound) {
-            print('Buzzer characteristic not found');
-          }
-        }).catchError((error) {
-          print('Error discovering services: $error');
-          showErrorDialog(
-            context,
-            'Failed to discover services on the device: $error',
-            'Service Discovery Error',
-          );
-        });
-      } else {
+
+      if (esp32Device == null) {
+        print('Buzzer characteristic not found');
         _showSwitchToGPSPrompt();
       }
     }
@@ -266,18 +185,55 @@ class _ItemScreenState extends State<ItemScreen> {
   }
 
   Future<void> _controlBuzzer(bool isOn) async {
-    if (esp32Device != null && buzzerCharacteristic != null) {
-      List<int> command = [isOn ? 1 : 0];
-      await buzzerCharacteristic!.write(command);
-      print('Buzzer is ${isOn ? 'on' : 'off'}');
+    try {
+      List<BluetoothService> services = await esp32Device!.discoverServices();
+      for (var service in services) {
+        if (service.uuid == Guid(bleCharac)) {
+          serviceFound = true;
+          for (var characteristic in service.characteristics) {
+            if (characteristic.uuid == Guid(buzzerCharc)) {
+              buzzerCharacteristic = characteristic;
+              int command = isOn ? 1 : 0;
+              String commandChar = command.toString();
+              List<int> commandBytes = utf8.encode(commandChar);
+              await buzzerCharacteristic!.write(commandBytes);
+              print('Buzzer is ${isOn ? 'on' : 'off'}');
+              print('Buzzer command sent: $commandChar');
+              return;
+            }
+          }
+        }
+      }
+      print('Buzzer characteristic not found');
+    } catch (e) {
+      print('Error controlling buzzer: $e');
     }
   }
 
   Future<void> sendUniqueId(String id) async {
-    if (mounted && esp32Device != null && uuidCharacteristic != null) {
-      List<int> idBytes = utf8.encode(id);
-      await uuidCharacteristic!.write(idBytes);
-      print('Unique ID sent: $id');
+    try {
+      List<BluetoothService> services = await esp32Device!.discoverServices();
+
+      for (var service in services) {
+        if (service.uuid == Guid(bleCharac)) {
+          serviceFound = true;
+
+          for (var characteristic in service.characteristics) {
+            if (characteristic.uuid == Guid(uuidCharc)) {
+              uuidCharacteristic = characteristic;
+              List<int> idBytes = utf8.encode(id);
+              await uuidCharacteristic!.write(idBytes);
+              print('Unique ID sent: $id');
+              isBuzzerOn = true;
+              _controlBuzzer(true);
+              return;
+            }
+          }
+        }
+      }
+      print('Error: UUID characteristic not found');
+    } catch (e) {
+      print('Error: $e');
     }
   }
 
@@ -346,7 +302,7 @@ class _ItemScreenState extends State<ItemScreen> {
                 const CircularProgressIndicator()
               else if (esp32Device != null)
                 Text(
-                  'ESP32 Device Found: ${esp32Device!.name}',
+                  ' Device: ${esp32Device!.name}',
                   style: const TextStyle(
                       fontFamily: "Enriqueta",
                       fontSize: 20,
@@ -354,31 +310,16 @@ class _ItemScreenState extends State<ItemScreen> {
                       color: Colors.white),
                 ),
               const SizedBox(height: 20),
-              StreamBuilder<double>(
-                stream: _getDistanceStream(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    return Text(
-                      'Distance to device: ${snapshot.data!.toStringAsFixed(2)} meters',
-                      style: const TextStyle(
-                        fontFamily: "Enriqueta",
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    );
-                  } else {
-                    return const Text(
-                      'Distance: Calculating...',
-                      style: TextStyle(
-                        fontFamily: "Enriqueta",
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    );
-                  }
-                },
+              Text(
+                distance != null
+                    ? 'Distance to device: ${(distance / 100).toStringAsFixed(2)} meters'
+                    : 'Distance: Calculating...',
+                style: const TextStyle(
+                  fontFamily: "Enriqueta",
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 20),
               if (esp32Device != null)
@@ -468,12 +409,5 @@ class _ItemScreenState extends State<ItemScreen> {
         pi;
 
     return -angle;
-  }
-
-  Stream<double> _getDistanceStream() async* {
-    while (true) {
-      yield distance;
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
   }
 }
