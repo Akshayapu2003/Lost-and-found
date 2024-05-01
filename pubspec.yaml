@@ -35,6 +35,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_blue: ^0.8.0
+  flutter_blue_plus: ^1.32.4
   flutter_polyline_points: ^2.0.0
   flutter_tts: ^4.0.2
   geolocator: ^11.0.0
@@ -67,6 +68,9 @@ flutter:
   assets:
     - assets/images/landing.jpeg
     - assets/images/logo.png
+    - assets/images/design.png
+    - assets/images/design1.png
+
   #   - images/a_dot_ham.jpeg
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware

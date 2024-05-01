@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
@@ -15,14 +16,14 @@ import 'dart:math';
 
 class ItemScreen extends StatefulWidget {
   const ItemScreen({
-    Key? key,
-  }) : super(key: key);
+    super.key,
+  });
 
   @override
   _ItemScreenState createState() => _ItemScreenState();
 }
 
-class _ItemScreenState extends State<ItemScreen> {
+class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   final FlutterBlue flutterBlue = FlutterBlue.instance;
   StreamSubscription<ScanResult>? scanSubscription;
   BluetoothDevice? esp32Device;
@@ -38,9 +39,6 @@ class _ItemScreenState extends State<ItemScreen> {
   bool isLocationPermissionGranted = false;
   bool isConnectPermissionGranted = false;
   bool isCoarsePermissionGranted = false;
-  final databaseReference = FirebaseDatabase.instance.ref();
-  bool serviceFound = false;
-  bool characteristicFound = false;
   final UserController userController = Get.find<UserController>();
   String uniqueId = '';
   int esp32RSSI = 0;
@@ -49,6 +47,9 @@ class _ItemScreenState extends State<ItemScreen> {
   final StreamController<double> _angleStreamController =
       StreamController<double>();
 
+  late StreamSubscription<double> distanceSubscription;
+  late StreamSubscription<double> angleSubscription;
+  DatabaseReference databaseReference = FirebaseDatabase.instance.ref();
   @override
   void initState() {
     super.initState();
@@ -70,6 +71,17 @@ class _ItemScreenState extends State<ItemScreen> {
         });
       }
     });
+
+    distanceSubscription =
+        _distanceStreamController.stream.listen((double distance) {
+      _updateDistance();
+    });
+
+    angleSubscription = _angleStreamController.stream.listen((double angle) {
+      _calculateArrowAngleFromOrientation(angle);
+    });
+
+    WidgetsBinding.instance.addObserver(this);
   }
 
   Future<void> _checkBluetoothStatus() async {
@@ -129,7 +141,7 @@ class _ItemScreenState extends State<ItemScreen> {
         }
         _connectToDevice(device);
         _updateDirectionalIndicators(scanResult.rssi);
-        _updateDistance(scanResult.rssi);
+        _updateDistance();
       }
     }, onError: (error) {
       print('Error during scanning: $error');
@@ -145,6 +157,7 @@ class _ItemScreenState extends State<ItemScreen> {
     try {
       await device.connect();
       sendUniqueId(uniqueId);
+      print("RSSI: ${esp32RSSI}");
     } catch (e) {
       print('Error connecting to device: $e');
       showErrorDialog(
@@ -159,7 +172,7 @@ class _ItemScreenState extends State<ItemScreen> {
         accelerometerValues.map((e) => e * e).reduce((a, b) => a + b);
     double orientation = gyroscopeValues[0];
     uniqueId = userController.uuid.value;
-    if (esp32RSSI > -60) {
+    if (esp32RSSI < -120) {
       if (!isBuzzerOn) {
         _controlBuzzer(true);
         isBuzzerOn = true;
@@ -176,24 +189,41 @@ class _ItemScreenState extends State<ItemScreen> {
         isBuzzerOn = false;
       }
 
-      if (esp32Device == null) {
+      if (esp32Device == null || esp32RSSI > -120) {
         print('Buzzer characteristic not found');
         _showSwitchToGPSPrompt();
       }
     }
   }
 
-  void _updateDistance(int esp32RSSI) {
-    double rssiAt1Meter = -60.0;
-    double n = 2.0;
-    double calculatedDistance =
-        pow(10, ((rssiAt1Meter - esp32RSSI) / (10 * n))) as double;
-    if (mounted) {
-      setState(() {
-        distance = calculatedDistance;
-      });
+  void _updateDistance() {
+    if (esp32RSSI != 0) {
+      double rssiAt1Meter = -60.0;
+      double n = 2.0;
+      double calculatedDistance =
+          pow(10, ((rssiAt1Meter - esp32RSSI) / (10 * n))) as double;
+      if (mounted) {
+        setState(() {
+          distance = calculatedDistance;
+        });
+      }
+      _distanceStreamController.add(calculatedDistance);
     }
-    _distanceStreamController.add(calculatedDistance);
+  }
+
+  double _calculateArrowAngleFromOrientation(double orientation) {
+    double minOrientation = -1.0;
+    double maxOrientation = 1.0;
+    double minAngle = -pi / 2;
+    double maxAngle = pi / 2;
+    double mappedAngle = lerpDouble(
+            minAngle,
+            maxAngle,
+            (orientation - minOrientation) /
+                (maxOrientation - minOrientation)) ??
+        0.0;
+
+    return mappedAngle;
   }
 
   Future<void> _controlBuzzer(bool isOn) async {
@@ -201,7 +231,6 @@ class _ItemScreenState extends State<ItemScreen> {
       List<BluetoothService> services = await esp32Device!.discoverServices();
       for (var service in services) {
         if (service.uuid == Guid(bleCharac)) {
-          serviceFound = true;
           for (var characteristic in service.characteristics) {
             if (characteristic.uuid == Guid(buzzerCharc)) {
               buzzerCharacteristic = characteristic;
@@ -228,8 +257,6 @@ class _ItemScreenState extends State<ItemScreen> {
 
       for (var service in services) {
         if (service.uuid == Guid(bleCharac)) {
-          serviceFound = true;
-
           for (var characteristic in service.characteristics) {
             if (characteristic.uuid == Guid(uuidCharc)) {
               uuidCharacteristic = characteristic;
@@ -283,11 +310,22 @@ class _ItemScreenState extends State<ItemScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _refreshPage();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     scanSubscription?.cancel();
     esp32Device?.disconnect();
     _distanceStreamController.close();
     _angleStreamController.close();
+    distanceSubscription.cancel();
+    angleSubscription.cancel();
     super.dispose();
   }
 
@@ -373,19 +411,7 @@ class _ItemScreenState extends State<ItemScreen> {
                         ),
                       );
                     } else {
-                      return Container(
-                        width: 100,
-                        height: 100,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.blue,
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward,
-                          size: 60,
-                          color: Colors.white,
-                        ),
-                      );
+                      return const SizedBox();
                     }
                   },
                 ),

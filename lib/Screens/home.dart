@@ -54,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       userController.setCurrentLocation(
           LatLng(positionLowAccuracy.latitude, positionLowAccuracy.longitude));
+
       updateCameraPosition(userController.currentPosition.value!);
 
       Position positionHighAccuracy = await Geolocator.getCurrentPosition(
@@ -61,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       userController.setCurrentLocation(LatLng(
           positionHighAccuracy.latitude, positionHighAccuracy.longitude));
+      updateCameraPosition(userController.currentPosition.value!);
     } catch (e) {
       print('Error: $e');
       showErrorDialog(context, 'Error getting the current location.', 'Error');

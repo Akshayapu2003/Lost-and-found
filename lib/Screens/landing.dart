@@ -51,6 +51,13 @@ class LandingScreen extends StatelessWidget {
                 ),
               ),
             ),
+            Positioned(
+              width: 55,
+              height: 55,
+              top: 255,
+              left: 30,
+              child: Image.asset("assets/images/design.png"),
+            ),
             const Positioned(
               top: 420,
               left: 20,
@@ -158,15 +165,13 @@ class LandingScreen extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 100, vertical: 10),
                   backgroundColor: const Color.fromARGB(255, 255, 255, 255),
                 ),
-                child: const Center(
-                  child: Text(
-                    'Track it',
-                    style: TextStyle(
-                      fontFamily: 'Enriqueta',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color.fromARGB(255, 3, 3, 3),
-                    ),
+                child: const Text(
+                  'Track it',
+                  style: TextStyle(
+                    fontFamily: 'Enriqueta',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color.fromARGB(255, 32, 32, 32),
                   ),
                 ),
               ),

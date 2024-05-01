@@ -19,8 +19,7 @@ class GoogleMapsScreen extends StatefulWidget {
   final String uuid;
 
   const GoogleMapsScreen(
-      {Key? key, required this.databaseReference, required this.uuid})
-      : super(key: key);
+      {super.key, required this.databaseReference, required this.uuid});
 
   @override
   State<GoogleMapsScreen> createState() => _GoogleMapsScreenState();
@@ -166,14 +165,14 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       await for (var location in Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.medium,
-        distanceFilter: 10, // Adjust as needed
+        distanceFilter: 10,
       ))) {
         _userController
             .setCurrentLocation(LatLng(location.latitude, location.longitude));
         _updateCameraPosition(_userController.currentPosition.value!);
         calculateDistance();
         speakDistance();
-        setState(() {}); // Trigger UI update
+        setState(() {});
       }
     } catch (e) {
       showSnackBar(context, 'Error listening for location changes: $e');
@@ -185,11 +184,17 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     StreamSubscription<ScanResult>? scanSubscription;
     scanSubscription = flutterBlue.scan().listen((scanResult) {
       BluetoothDevice device = scanResult.device;
-      if (device.name == 'ESP32_GPS_BLE') {
+      if (device.name == 'ESP32-BLE-Server') {
         Get.to(() => const ItemScreen());
         scanSubscription?.cancel();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _flutterTts.stop();
+    super.dispose();
   }
 
   @override
