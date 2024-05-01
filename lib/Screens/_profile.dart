@@ -178,6 +178,7 @@ class ProfileScreen extends StatelessWidget {
                             'Phone', userController.phone.value, context),
                         buildListTile(
                             'Email', userController.email.value, context),
+                        buildListTile('Feedback', "Give Feedback", context),
                         buildListTile('SignOut', "SignOut", context),
                       ],
                     ),
@@ -207,11 +208,15 @@ class ProfileScreen extends StatelessWidget {
         iconData = Icons.logout_outlined;
         onTap = () => logout(context);
         break;
+      case 'feedback':
+        iconData = Icons.feedback;
+        onTap = () => _giveFeedback(context);
+        break;
       default:
         iconData = Icons.info;
     }
     _textFieldController.text = "";
-    if (title.toLowerCase() != 'signout') {
+    if (title.toLowerCase() != 'signout' && title.toLowerCase() != 'feedback') {
       return Padding(
         padding: const EdgeInsets.all(8.0),
         child: Container(
@@ -325,8 +330,8 @@ class ProfileScreen extends StatelessWidget {
 
   void _launchPhone(String phoneNumber) async {
     final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
-    if (await canLaunch(phoneUri.toString())) {
-      await launch(phoneUri.toString());
+    if (await canLaunchUrlString(phoneUri.toString())) {
+      await launchUrlString(phoneUri.toString());
     } else {
       print('Could not launch $phoneUri');
     }
@@ -362,6 +367,69 @@ class ProfileScreen extends StatelessWidget {
       }
     } catch (e) {
       print('Error saving user data: $e');
+    }
+  }
+
+  Future<void> _giveFeedback(BuildContext context) async {
+    String feedback = '';
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color.fromARGB(255, 0, 0, 0),
+        title: const Text('Give Feedback'),
+        content: TextField(
+          onChanged: (text) {
+            feedback = text;
+          },
+          decoration: const InputDecoration(
+            hintText: 'Enter your feedback here',
+            hintStyle: TextStyle(color: Colors.white),
+          ),
+          style: const TextStyle(color: Colors.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _sendFeedbackByEmail(feedback, context);
+              Navigator.pop(context);
+            },
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendFeedbackByEmail(
+      String feedback, BuildContext context) async {
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: 'akshaya4703@gmail.com',
+      queryParameters: {'subject': 'Feedback', 'body': feedback},
+    );
+
+    try {
+      await launchUrlString(emailUri.toString());
+      showSnackBar(
+        context,
+        'Feedback sent successfully!',
+      );
+    } catch (e) {
+      print('Error sending feedback: $e');
+
+      showSnackBar(
+        context,
+        'Failed to send feedback. Please try again later.',
+      );
     }
   }
 }

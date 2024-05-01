@@ -15,8 +15,8 @@ import 'dart:math';
 
 class ItemScreen extends StatefulWidget {
   const ItemScreen({
-    super.key,
-  });
+    Key? key,
+  }) : super(key: key);
 
   @override
   _ItemScreenState createState() => _ItemScreenState();
@@ -44,6 +44,11 @@ class _ItemScreenState extends State<ItemScreen> {
   final UserController userController = Get.find<UserController>();
   String uniqueId = '';
   int esp32RSSI = 0;
+  final StreamController<double> _distanceStreamController =
+      StreamController<double>();
+  final StreamController<double> _angleStreamController =
+      StreamController<double>();
+
   @override
   void initState() {
     super.initState();
@@ -97,6 +102,12 @@ class _ItemScreenState extends State<ItemScreen> {
     }
     if (allPermissionsGranted) {
       startScan();
+    }
+  }
+
+  Future<void> _refreshPage() async {
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -182,6 +193,7 @@ class _ItemScreenState extends State<ItemScreen> {
         distance = calculatedDistance;
       });
     }
+    _distanceStreamController.add(calculatedDistance);
   }
 
   Future<void> _controlBuzzer(bool isOn) async {
@@ -274,6 +286,8 @@ class _ItemScreenState extends State<ItemScreen> {
   void dispose() {
     scanSubscription?.cancel();
     esp32Device?.disconnect();
+    _distanceStreamController.close();
+    _angleStreamController.close();
     super.dispose();
   }
 
@@ -310,34 +324,70 @@ class _ItemScreenState extends State<ItemScreen> {
                       color: Colors.white),
                 ),
               const SizedBox(height: 20),
-              Text(
-                distance != null
-                    ? 'Distance to device: ${(distance / 100).toStringAsFixed(2)} meters'
-                    : 'Distance: Calculating...',
-                style: const TextStyle(
-                  fontFamily: "Enriqueta",
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                ),
+              StreamBuilder<double>(
+                stream: _distanceStreamController.stream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return Text(
+                      'Distance to device: ${(snapshot.data! / 100).toStringAsFixed(2)} meters',
+                      style: const TextStyle(
+                        fontFamily: "Enriqueta",
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    );
+                  } else {
+                    return const Text(
+                      'Distance: Calculating...',
+                      style: TextStyle(
+                        fontFamily: "Enriqueta",
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    );
+                  }
+                },
               ),
               const SizedBox(height: 20),
               if (esp32Device != null)
-                Transform.rotate(
-                  angle: _calculateArrowAngleFromRSSI(esp32RSSI),
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.blue,
-                    ),
-                    child: const Icon(
-                      Icons.arrow_forward,
-                      size: 60,
-                      color: Colors.white,
-                    ),
-                  ),
+                StreamBuilder<double>(
+                  stream: _angleStreamController.stream,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      return Transform.rotate(
+                        angle: snapshot.data!,
+                        child: Container(
+                          width: 100,
+                          height: 100,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.blue,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_forward,
+                            size: 60,
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    } else {
+                      return Container(
+                        width: 100,
+                        height: 100,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.blue,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward,
+                          size: 60,
+                          color: Colors.white,
+                        ),
+                      );
+                    }
+                  },
                 ),
               const SizedBox(
                 height: 20,
@@ -390,24 +440,5 @@ class _ItemScreenState extends State<ItemScreen> {
         ),
       ),
     );
-  }
-
-  double _calculateArrowAngleFromRSSI(int rssi) {
-    const double minRSSI = 0.0;
-    const double maxRSSI = 7.0;
-    const double minTransmitPower = -12.0;
-    const double maxTransmitPower = 9.0;
-
-    double clampedRSSI = rssi.clamp(minRSSI, maxRSSI) as double;
-
-    double normalizedRSSI = (clampedRSSI - minRSSI) / (maxRSSI - minRSSI);
-    double transmitPower = minTransmitPower +
-        (normalizedRSSI * (maxTransmitPower - minTransmitPower));
-
-    double angle = (transmitPower - minTransmitPower) /
-        (maxTransmitPower - minTransmitPower) *
-        pi;
-
-    return -angle;
   }
 }

@@ -6,20 +6,21 @@ import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:main/Functions/snackbar.dart';
 import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/items.dart';
 import 'package:main/Screens/landing.dart';
 import 'package:main/constants/constants.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
 
 class GoogleMapsScreen extends StatefulWidget {
   final DatabaseReference databaseReference;
   final String uuid;
 
   const GoogleMapsScreen(
-      {super.key, required this.databaseReference, required this.uuid});
+      {Key? key, required this.databaseReference, required this.uuid})
+      : super(key: key);
 
   @override
   State<GoogleMapsScreen> createState() => _GoogleMapsScreenState();
@@ -40,12 +41,14 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
   void initState() {
     super.initState();
     _initializeApp();
+    _listenForLocationChanges();
   }
 
   Future<void> _initializeApp() async {
     try {
       await Firebase.initializeApp();
       await _getCurrentLocation();
+      await _fetchCoordinatesFromFirebase();
       fetchPolylinePoints();
       calculateDistance();
       speakDistance();
@@ -73,15 +76,6 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       _updateCameraPosition(_userController.currentPosition.value!);
     } catch (e) {
       showSnackBar(context, 'Error fetching current location: $e');
-    }
-  }
-
-  void _updateCameraPosition(LatLng position) async {
-    final controller = await _mapController.future;
-    if (_userController.currentPosition.value != null) {
-      final newCameraPosition = CameraPosition(target: position, zoom: 15);
-      await controller
-          .animateCamera(CameraUpdate.newCameraPosition(newCameraPosition));
     }
   }
 
@@ -151,8 +145,39 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
   }
 
   Future<void> speakDistance() async {
+    await _flutterTts.setLanguage('en-US');
+    await _flutterTts.setPitch(1);
+    await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.speak(
         "Distance to destination: ${(_distance / 1000).toStringAsFixed(2)} kilometers");
+  }
+
+  void _updateCameraPosition(LatLng position) async {
+    final controller = await _mapController.future;
+    if (_userController.currentPosition.value != null) {
+      final newCameraPosition = CameraPosition(target: position, zoom: 15);
+      await controller
+          .animateCamera(CameraUpdate.newCameraPosition(newCameraPosition));
+    }
+  }
+
+  Future<void> _listenForLocationChanges() async {
+    try {
+      await for (var location in Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.medium,
+        distanceFilter: 10, // Adjust as needed
+      ))) {
+        _userController
+            .setCurrentLocation(LatLng(location.latitude, location.longitude));
+        _updateCameraPosition(_userController.currentPosition.value!);
+        calculateDistance();
+        speakDistance();
+        setState(() {}); // Trigger UI update
+      }
+    } catch (e) {
+      showSnackBar(context, 'Error listening for location changes: $e');
+    }
   }
 
   void startScanAndNavigateToItemScreen() {
