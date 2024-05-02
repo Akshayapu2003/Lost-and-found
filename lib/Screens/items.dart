@@ -14,24 +14,16 @@ import 'package:main/Screens/route.dart';
 import 'package:main/constants/constants.dart';
 
 class BluetoothData {
-  final StreamController<double> _distanceStreamController =
-      StreamController<double>.broadcast();
   final StreamController<double> _angleStreamController =
       StreamController<double>.broadcast();
 
-  Stream<double> get distanceStream => _distanceStreamController.stream;
   Stream<double> get angleStream => _angleStreamController.stream;
-
-  void updateDistance(double distance) {
-    _distanceStreamController.sink.add(distance);
-  }
 
   void updateAngle(double angle) {
     _angleStreamController.sink.add(angle);
   }
 
   void dispose() {
-    _distanceStreamController.close();
     _angleStreamController.close();
   }
 }
@@ -57,6 +49,7 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   List<double> accelerometerValues = [0, 0, 0];
   List<double> gyroscopeValues = [0, 0, 0];
   double distance = 0.0;
+  bool controller = false;
   bool isBuzzerOn = false;
   bool isScanning = false;
   bool isBluetoothPermissionGranted = false;
@@ -68,18 +61,12 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   String uniqueId = '';
   int esp32RSSI = 0;
 
+  late Timer _timer;
+
   @override
   void initState() {
     super.initState();
     _bluetoothSetupManager.initialize(context);
-    _bluetoothSetupManager.setupCompletedStream.listen((isSetupCompleted) {
-      if (isSetupCompleted) {
-        startScan();
-      } else {
-        print('Bluetooth setup failed');
-      }
-    });
-
     accelerometerEvents.listen(
       (AccelerometerEvent event) {
         if (mounted) {
@@ -97,18 +84,36 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
         });
       }
     });
+    check();
+    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      _updateDirectionalIndicators(esp32RSSI);
+    });
   }
 
   @override
   void dispose() {
     _bluetoothData.dispose();
-    _bluetoothSetupManager.dispose();
+    _timer.cancel();
     scanSubscription?.cancel();
     esp32Device?.disconnect();
     super.dispose();
   }
 
+  check() {
+    if (!controller) {
+      if (userController.startScanning.value) {
+        startScan();
+      } else {
+        print('Bluetooth setup failed');
+      }
+    } else {
+      _updateDistance();
+      _updateDirectionalIndicators(esp32RSSI);
+    }
+  }
+
   void startScan() {
+    controller = true;
     if (mounted) {
       setState(() {
         isScanning = true;
@@ -194,7 +199,6 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
           distance = calculatedDistance;
         });
       }
-      _bluetoothData.updateDistance(calculatedDistance);
     }
   }
 
@@ -203,6 +207,9 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     double maxOrientation = 1.0;
     double minAngle = -pi / 2;
     double maxAngle = pi / 2;
+
+    orientation = orientation.clamp(minOrientation, maxOrientation);
+
     double mappedAngle = lerpDouble(
             minAngle,
             maxAngle,
@@ -329,58 +336,43 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
                       color: Colors.white),
                 ),
               const SizedBox(height: 20),
-              StreamBuilder<double>(
-                stream: _bluetoothData.distanceStream,
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    return Text(
-                      'Distance to device: ${(snapshot.data! / 100).toStringAsFixed(2)} meters',
-                      style: const TextStyle(
-                        fontFamily: "Enriqueta",
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    );
-                  } else {
-                    return const Text(
-                      'Distance: Calculating...',
-                      style: TextStyle(
-                        fontFamily: "Enriqueta",
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    );
-                  }
-                },
+              Text(
+                'Distance to device: ${(distance / 100).toStringAsFixed(2)} meters',
+                style: const TextStyle(
+                  fontFamily: "Enriqueta",
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 20),
               if (esp32Device != null)
-                StreamBuilder<double>(
-                  stream: _bluetoothData.angleStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData) {
-                      return Transform.rotate(
-                        angle: snapshot.data!,
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.blue,
+                SizedBox(
+                  width: 150,
+                  height: 150,
+                  child: StreamBuilder<double>(
+                    stream: _bluetoothData.angleStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return Transform.rotate(
+                          angle: snapshot.data!,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.blue,
+                            ),
+                            child: const Icon(
+                              Icons.arrow_forward,
+                              size: 60,
+                              color: Colors.white,
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.arrow_forward,
-                            size: 60,
-                            color: Colors.white,
-                          ),
-                        ),
-                      );
-                    } else {
-                      return const SizedBox();
-                    }
-                  },
+                        );
+                      } else {
+                        return const SizedBox();
+                      }
+                    },
+                  ),
                 ),
               const SizedBox(
                 height: 20,

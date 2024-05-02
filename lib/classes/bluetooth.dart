@@ -1,28 +1,25 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
+import 'package:main/GetxControllers/controllers.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class BluetoothSetupManager {
-  final StreamController<bool> _setupCompletedController =
-      StreamController<bool>.broadcast();
-
-  Stream<bool> get setupCompletedStream => _setupCompletedController.stream;
+  final UserController userController = Get.find<UserController>();
 
   Future<void> initialize(BuildContext context) async {
     bool isBluetoothEnabled = await _checkBluetoothStatus();
     if (isBluetoothEnabled) {
       bool permissionsGranted = await _requestBluetoothPermissions(context);
       if (permissionsGranted) {
-        _setupCompletedController.sink.add(true);
+        userController.setStartScanning(true);
       } else {
-        _setupCompletedController.sink.add(false);
+        userController.setStartScanning(false);
         showSnackBar(context, "Permission is not granted");
       }
     } else {
-      _setupCompletedController.sink.add(false);
+      userController.setStartScanning(false);
       showErrorDialog(
         context,
         'Please enable Bluetooth to use this feature.',
@@ -67,9 +64,5 @@ class BluetoothSetupManager {
         ),
       ],
     );
-  }
-
-  void dispose() {
-    _setupCompletedController.close();
   }
 }

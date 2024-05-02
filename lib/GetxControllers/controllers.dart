@@ -9,7 +9,7 @@ class UserController extends GetxController {
   RxString phone = ''.obs;
   Rx<File?> image = Rx<File?>(null);
   Rx<LatLng?> currentPosition = Rx<LatLng?>(null);
-  RxBool isOnItemScreen = false.obs;
+  RxBool startScanning = false.obs;
   RxString uuid = ''.obs;
 
   RxString get gName => name;
@@ -17,7 +17,7 @@ class UserController extends GetxController {
   RxString get gPhone => phone;
   File? get gImage => image.value;
   Rx<LatLng?> get gcurrentPosition => currentPosition;
-  bool get gisOnItemScreen => true;
+  bool get gstartScanning => false;
 
   void setName(String value) {
     name.value = value;
@@ -47,8 +47,8 @@ class UserController extends GetxController {
     update();
   }
 
-  void setIsOnItemScreen(bool value) {
-    isOnItemScreen.value = value;
+  void setStartScanning(bool value) {
+    startScanning.value = value;
   }
 
   void setUUID(String value) {
