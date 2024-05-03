@@ -50,7 +50,7 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     try {
       await Firebase.initializeApp();
       await _getCurrentLocation();
-      await _fetchCoordinatesFromFirebase();
+      _coordinatesStream();
     } catch (e) {
       showSnackBar(context, 'Error initializing app: $e');
     }
@@ -78,41 +78,19 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     }
   }
 
-  Future<void> _fetchCoordinatesFromFirebase() async {
-    try {
-      final coordinatesSnapshot = await widget.databaseReference
-          .child(widget.uuid)
-          .child('gps_coordinates')
-          .once();
-      final coordinatesData =
-          coordinatesSnapshot.snapshot.value as Map<dynamic, dynamic>?;
-      if (coordinatesData != null) {
-        final coordinates = coordinatesData.entries
-            .map((entry) => LatLng(entry.value['latitude'] as double,
-                entry.value['longitude'] as double))
-            .toList();
-        userController.setCoordinates(coordinates);
-      }
-    } catch (e) {
-      print('Error fetching coordinates from Firebase: $e');
-    }
-  }
-
   Stream<List<LatLng>> _coordinatesStream() {
     return widget.databaseReference
         .child(widget.uuid)
         .child('gps_coordinates')
         .onValue
         .map((event) {
-      final coordinatesData = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (coordinatesData != null) {
-        return coordinatesData.entries
-            .map((entry) => LatLng(entry.value['latitude'] as double,
-                entry.value['longitude'] as double))
-            .toList();
-      } else {
-        return [];
-      }
+      final latitudeSnapshot = event.snapshot.child('latitude');
+      final longitudeSnapshot = event.snapshot.child('longitude');
+
+      final double latitude = latitudeSnapshot.value as double;
+      final double longitude = longitudeSnapshot.value as double;
+
+      return [LatLng(latitude, longitude)];
     });
   }
 
@@ -172,16 +150,13 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
           "Distance to destination: ${(_distance / 1000).toStringAsFixed(2)} kilometers");
     }
 
-    // Get the polyline points
     List<LatLng> polylinePoints =
         _polylines.isNotEmpty ? _polylines.first.points : [];
 
-    // Find the closest point on the polyline to the user's current location
     LatLng userLocation = _userController.currentPosition.value!;
     int closestPointIndex =
         _findClosestPointOnPolyline(userLocation, polylinePoints);
 
-    // Generate navigation instructions based on user's position and next few points
     String instructions = _generateNavigationInstructions(
         userLocation, polylinePoints, closestPointIndex);
 
@@ -211,7 +186,6 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
 
   String _generateNavigationInstructions(
       LatLng userLocation, List<LatLng> polylinePoints, int closestPointIndex) {
-// Check if closestPointIndex is not the last point in the polyline
     if (closestPointIndex < polylinePoints.length - 1) {
       LatLng nextPoint = polylinePoints[closestPointIndex + 1];
       num bearing = maps_toolkit.SphericalUtil.computeHeading(
