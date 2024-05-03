@@ -11,6 +11,7 @@ class UserController extends GetxController {
   Rx<LatLng?> currentPosition = Rx<LatLng?>(null);
   RxBool startScanning = false.obs;
   RxString uuid = ''.obs;
+  RxList<LatLng> coordinates = <LatLng>[].obs;
 
   RxString get gName => name;
   RxString get gemail => email;
@@ -18,6 +19,7 @@ class UserController extends GetxController {
   File? get gImage => image.value;
   Rx<LatLng?> get gcurrentPosition => currentPosition;
   bool get gstartScanning => false;
+  List<LatLng> get gCoordinates => coordinates.toList();
 
   void setName(String value) {
     name.value = value;
@@ -53,6 +55,11 @@ class UserController extends GetxController {
 
   void setUUID(String value) {
     uuid.value = value;
+    update();
+  }
+
+  void setCoordinates(List<LatLng> newCoordinates) {
+    coordinates.assignAll(newCoordinates);
     update();
   }
 }

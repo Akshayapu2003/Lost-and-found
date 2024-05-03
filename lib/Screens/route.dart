@@ -11,7 +11,6 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:main/Functions/snackbar.dart';
 import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/items.dart';
-import 'package:main/Screens/landing.dart';
 import 'package:main/constants/constants.dart';
 
 class GoogleMapsScreen extends StatefulWidget {
@@ -32,8 +31,7 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
   double _distance = 0.0;
   final UserController _userController = Get.find<UserController>();
   final FlutterTts _flutterTts = FlutterTts();
-  final CoordinatesController _coordinatesController =
-      Get.find<CoordinatesController>();
+  final UserController userController = Get.find<UserController>();
   bool _isLoading = true;
 
   @override
@@ -41,6 +39,7 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     super.initState();
     _initializeApp();
     _listenForLocationChanges();
+    startScanAndNavigateToItemScreen();
   }
 
   Future<void> _initializeApp() async {
@@ -91,7 +90,7 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
             .map((entry) => LatLng(entry.value['latitude'] as double,
                 entry.value['longitude'] as double))
             .toList();
-        _coordinatesController.setCoordinates(coordinates);
+        userController.setCoordinates(coordinates);
       }
     } catch (e) {
       print('Error fetching coordinates from Firebase: $e');
@@ -105,8 +104,8 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
         GOOGLE_MAPS_API_KEY,
         PointLatLng(_userController.currentPosition.value!.latitude,
             _userController.currentPosition.value!.longitude),
-        PointLatLng(_coordinatesController.coordinates.last.latitude,
-            _coordinatesController.coordinates.last.longitude),
+        PointLatLng(userController.coordinates.last.latitude,
+            userController.coordinates.last.longitude),
         travelMode: TravelMode.driving,
       );
       if (result.points.isNotEmpty) {
@@ -131,13 +130,13 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
 
   void calculateDistance() {
     if (_userController.currentPosition.value != null &&
-        _coordinatesController.coordinates.isNotEmpty) {
+        userController.coordinates.isNotEmpty) {
       setState(() {
         _distance = Geolocator.distanceBetween(
           _userController.currentPosition.value!.latitude,
           _userController.currentPosition.value!.longitude,
-          _coordinatesController.coordinates.last.latitude,
-          _coordinatesController.coordinates.last.longitude,
+          userController.coordinates.last.latitude,
+          userController.coordinates.last.longitude,
         );
       });
     }
@@ -231,13 +230,14 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
                         markerId: const MarkerId('Current Location'),
                         icon: BitmapDescriptor.defaultMarker,
                         position: targetLatLng),
-                    if (_coordinatesController.coordinates.isNotEmpty)
+                    if (userController.coordinates.isNotEmpty)
                       Marker(
                           markerId: const MarkerId('Device Location'),
                           icon: BitmapDescriptor.defaultMarker,
-                          position: _coordinatesController.coordinates.last),
+                          position: userController.coordinates.last),
                   },
                   polylines: _polylines,
+                  myLocationEnabled: true,
                 ),
               ],
             ),
