@@ -12,6 +12,7 @@ import 'package:main/Functions/snackbar.dart';
 import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/items.dart';
 import 'package:main/constants/constants.dart';
+import 'package:maps_toolkit/maps_toolkit.dart' as maps_toolkit;
 
 class GoogleMapsScreen extends StatefulWidget {
   final DatabaseReference databaseReference;
@@ -34,12 +35,15 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
   final UserController userController = Get.find<UserController>();
   bool _isLoading = true;
 
+  StreamSubscription<ScanResult>? _scanSubscription;
+  StreamSubscription<Position>? _locationSubscription;
+  StreamSubscription<List<LatLng>>? _databaseSubscription;
+
   @override
   void initState() {
     super.initState();
     _initializeApp();
-    _listenForLocationChanges();
-    startScanAndNavigateToItemScreen();
+    _startListening();
   }
 
   Future<void> _initializeApp() async {
@@ -47,9 +51,6 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       await Firebase.initializeApp();
       await _getCurrentLocation();
       await _fetchCoordinatesFromFirebase();
-      fetchPolylinePoints();
-      calculateDistance();
-      speakDistance();
     } catch (e) {
       showSnackBar(context, 'Error initializing app: $e');
     }
@@ -97,6 +98,24 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     }
   }
 
+  Stream<List<LatLng>> _coordinatesStream() {
+    return widget.databaseReference
+        .child(widget.uuid)
+        .child('gps_coordinates')
+        .onValue
+        .map((event) {
+      final coordinatesData = event.snapshot.value as Map<dynamic, dynamic>?;
+      if (coordinatesData != null) {
+        return coordinatesData.entries
+            .map((entry) => LatLng(entry.value['latitude'] as double,
+                entry.value['longitude'] as double))
+            .toList();
+      } else {
+        return [];
+      }
+    });
+  }
+
   Future<void> fetchPolylinePoints() async {
     try {
       final polylinePoints = PolylinePoints();
@@ -110,6 +129,7 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       );
       if (result.points.isNotEmpty) {
         setState(() {
+          _polylines.clear();
           _polylines.add(Polyline(
             polylineId: const PolylineId("poly"),
             color: Colors.blue,
@@ -142,12 +162,85 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     }
   }
 
-  Future<void> speakDistance() async {
+  Future<void> speakInstructions() async {
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setPitch(1);
     await _flutterTts.setSpeechRate(0.5);
-    await _flutterTts.speak(
-        "Distance to destination: ${(_distance / 1000).toStringAsFixed(2)} kilometers");
+
+    if (_distance > 0) {
+      await _flutterTts.speak(
+          "Distance to destination: ${(_distance / 1000).toStringAsFixed(2)} kilometers");
+    }
+
+    // Get the polyline points
+    List<LatLng> polylinePoints =
+        _polylines.isNotEmpty ? _polylines.first.points : [];
+
+    // Find the closest point on the polyline to the user's current location
+    LatLng userLocation = _userController.currentPosition.value!;
+    int closestPointIndex =
+        _findClosestPointOnPolyline(userLocation, polylinePoints);
+
+    // Generate navigation instructions based on user's position and next few points
+    String instructions = _generateNavigationInstructions(
+        userLocation, polylinePoints, closestPointIndex);
+
+    // Speak the instructions
+    await _flutterTts.speak(instructions);
+  }
+
+  int _findClosestPointOnPolyline(
+      LatLng userLocation, List<LatLng> polylinePoints) {
+    double minDistance = double.infinity;
+    int closestPointIndex = 0;
+
+    for (int i = 0; i < polylinePoints.length; i++) {
+      double distance = Geolocator.distanceBetween(
+          userLocation.latitude,
+          userLocation.longitude,
+          polylinePoints[i].latitude,
+          polylinePoints[i].longitude);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestPointIndex = i;
+      }
+    }
+
+    return closestPointIndex;
+  }
+
+  String _generateNavigationInstructions(
+      LatLng userLocation, List<LatLng> polylinePoints, int closestPointIndex) {
+// Check if closestPointIndex is not the last point in the polyline
+    if (closestPointIndex < polylinePoints.length - 1) {
+      LatLng nextPoint = polylinePoints[closestPointIndex + 1];
+      num bearing = maps_toolkit.SphericalUtil.computeHeading(
+          userLocation as maps_toolkit.LatLng,
+          nextPoint as maps_toolkit.LatLng);
+      num distance = maps_toolkit.SphericalUtil.computeDistanceBetween(
+          userLocation as maps_toolkit.LatLng,
+          nextPoint as maps_toolkit.LatLng);
+
+      if (bearing >= 337.5 || bearing < 22.5) {
+        return "Continue straight for ${distance.toStringAsFixed(0)} meters";
+      } else if (bearing >= 22.5 && bearing < 67.5) {
+        return "Turn right in ${distance.toStringAsFixed(0)} meters";
+      } else if (bearing >= 67.5 && bearing < 112.5) {
+        return "Turn right in ${distance.toStringAsFixed(0)} meters";
+      } else if (bearing >= 112.5 && bearing < 157.5) {
+        return "Turn right in ${distance.toStringAsFixed(0)} meters";
+      } else if (bearing >= 157.5 && bearing < 202.5) {
+        return "Turn around in ${distance.toStringAsFixed(0)} meters";
+      } else if (bearing >= 202.5 && bearing < 247.5) {
+        return "Turn left in ${distance.toStringAsFixed(0)} meters";
+      } else if (bearing >= 247.5 && bearing < 292.5) {
+        return "Turn left in ${distance.toStringAsFixed(0)} meters";
+      } else {
+        return "Turn left in ${distance.toStringAsFixed(0)} meters";
+      }
+    } else {
+      return "You have reached your destination";
+    }
   }
 
   void _updateCameraPosition(LatLng position) async {
@@ -159,39 +252,41 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     }
   }
 
-  Future<void> _listenForLocationChanges() async {
-    try {
-      await for (var location in Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.medium,
-        distanceFilter: 10,
-      ))) {
-        _userController
-            .setCurrentLocation(LatLng(location.latitude, location.longitude));
-        _updateCameraPosition(_userController.currentPosition.value!);
-        calculateDistance();
-        speakDistance();
-        setState(() {});
-      }
-    } catch (e) {
-      showSnackBar(context, 'Error listening for location changes: $e');
-    }
-  }
-
-  void startScanAndNavigateToItemScreen() {
-    FlutterBlue flutterBlue = FlutterBlue.instance;
-    StreamSubscription<ScanResult>? scanSubscription;
-    scanSubscription = flutterBlue.scan().listen((scanResult) {
+  void _startListening() {
+    _scanSubscription = FlutterBlue.instance.scan().listen((scanResult) {
       BluetoothDevice device = scanResult.device;
       if (device.name == 'ESP32-BLE-Server') {
         Get.to(() => const ItemScreen());
-        scanSubscription?.cancel();
+// You can add additional logic here if needed
       }
+    });
+    _locationSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.medium,
+        distanceFilter: 10,
+      ),
+    ).listen((position) {
+      _userController
+          .setCurrentLocation(LatLng(position.latitude, position.longitude));
+      _updateCameraPosition(_userController.currentPosition.value!);
+      calculateDistance();
+      speakInstructions();
+      setState(() {});
+    });
+
+    _databaseSubscription = _coordinatesStream().listen((coordinates) {
+      userController.setCoordinates(coordinates);
+      fetchPolylinePoints();
+      calculateDistance();
+      speakInstructions();
     });
   }
 
   @override
   void dispose() {
+    _scanSubscription?.cancel();
+    _locationSubscription?.cancel();
+    _databaseSubscription?.cancel();
     _flutterTts.stop();
     super.dispose();
   }
@@ -200,7 +295,6 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
   Widget build(BuildContext context) {
     final targetLatLng =
         _userController.currentPosition.value ?? const LatLng(10.1632, 76.6413);
-
     return Scaffold(
       body: Column(
         children: [

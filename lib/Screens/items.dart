@@ -1,17 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:ui';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
 import 'package:main/Functions/show_dialog_signout.dart';
-import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/route.dart';
 import 'package:main/classes/bluetooth.dart';
 import 'package:main/constants/constants.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:uuid/uuid.dart';
 
 class BluetoothData {
   final StreamController<double> _angleStreamController =
@@ -80,11 +79,12 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   bool isLocationPermissionGranted = false;
   bool isConnectPermissionGranted = false;
   bool isCoarsePermissionGranted = false;
-  final UserController userController = Get.find<UserController>();
   String uniqueId = '';
   int esp32RSSI = 0;
   final bluetoothController = Get.put(BluetoothController());
   late Timer _timer;
+  bool enabled = true;
+  Uuid uuid = const Uuid();
 
   @override
   void initState() {
@@ -95,9 +95,6 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     _checkConnectedDevice();
     _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       _updateDirectionalIndicators(bluetoothController.rssi);
-      flutterBlue.scan().listen((scanResult) {
-        _handleScanResult(scanResult);
-      });
     });
     bluetoothStateSubscription =
         FlutterBlue.instance.state.listen((BluetoothState state) {
@@ -134,6 +131,8 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     scanSubscription?.cancel();
     bluetoothStateSubscription?.cancel();
     _connectedDevice?.disconnect();
+    _timer.cancel();
+    _streamSensorData();
     super.dispose();
   }
 
@@ -155,7 +154,6 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
             }
           }
         }
-        sendUniqueId(uniqueId);
       } catch (e) {
         print('Error reconnecting to device: $e');
       }
@@ -179,9 +177,11 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
 
   void startScan() {
     if (scanSubscription == null) {
-      setState(() {
-        isScanning = true;
-      });
+      if (mounted) {
+        setState(() {
+          isScanning = true;
+        });
+      }
       scanSubscription = flutterBlue.scan().listen(
         _handleScanResult,
         onError: (error) {
@@ -222,8 +222,11 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
         rssi,
         distance,
       );
-
-      sendUniqueId(uniqueId);
+      if (enabled) {
+        uniqueId = uuid.v4();
+        sendUniqueId(uniqueId);
+        enabled = false;
+      }
       print("RSSI: $rssi");
     } catch (e) {
       print('Error connecting to device: $e');
@@ -235,47 +238,32 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   }
 
   void _updateDirectionalIndicators(int rssi) {
-    double accelerationX = accelerometerValues?[0] ?? 0;
-    double accelerationY = accelerometerValues?[1] ?? 0;
-    double accelerationZ = accelerometerValues?[2] ?? 0;
+    if (accelerometerValues != null && accelerometerValues!.length >= 3) {
+      double accelerationX = accelerometerValues![0];
+      double accelerationY = accelerometerValues![1];
 
-    double accelerationMagnitude = sqrt(
-        pow(accelerationX, 2) + pow(accelerationY, 2) + pow(accelerationZ, 2));
-    double orientation = atan2(accelerationY, accelerationX);
+      double magnitude = sqrt(pow(accelerationX, 2) +
+          pow(accelerationY, 2) +
+          pow(accelerationX, 2));
+      double normalizedX = accelerationX / magnitude;
+      double normalizedY = accelerationY / magnitude;
 
-    double angle =
-        _calculateArrowAngleFromAccelerometerOrientation(orientation);
-    _bluetoothData.updateAngle(angle);
-    uniqueId = userController.uuid.value;
+      double orientation = atan2(-normalizedY, normalizedX);
 
-    if (bluetoothController.connectedDevice != null) {
-      if (bluetoothController.rssi > -100) {
-        _updateDistance();
+      //   double angle = atan2(accelerationX, accelerationY);
+      _bluetoothData.updateAngle(orientation);
+
+      if (bluetoothController.connectedDevice != null) {
+        if (bluetoothController.rssi > -150) {
+          _updateDistance();
+        } else {
+          print('Buzzer characteristic not found');
+          _showSwitchToGPSPrompt();
+        }
       } else {
-        print('Buzzer characteristic not found');
-        _showSwitchToGPSPrompt();
+        checkAndStartScanning();
       }
-    } else {
-      checkAndStartScanning();
     }
-  }
-
-  double _calculateArrowAngleFromAccelerometerOrientation(double orientation) {
-    double minOrientation = -pi;
-    double maxOrientation = pi;
-    double minAngle = -pi / 2;
-    double maxAngle = pi / 2;
-
-    orientation = orientation.clamp(minOrientation, maxOrientation);
-
-    double mappedAngle = lerpDouble(
-          minAngle,
-          maxAngle,
-          (orientation - minOrientation) / (maxOrientation - minOrientation),
-        ) ??
-        0.0;
-
-    return mappedAngle;
   }
 
   void _updateDistance() {
@@ -285,9 +273,11 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
       double calculatedDistance =
           pow(10, ((rssiAt1Meter - bluetoothController.rssi) / (10 * n)))
               as double;
-      setState(() {
-        distance = calculatedDistance;
-      });
+      if (mounted) {
+        setState(() {
+          distance = calculatedDistance;
+        });
+      }
       bluetoothController.updateConnectedDevice(
         bluetoothController.connectedDevice,
         bluetoothController.buzzerCharacteristic,
@@ -444,9 +434,11 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     if (isScanning) {
       scanSubscription?.cancel();
       isScanning = false;
-      setState(() {
-        isScanning = false;
-      });
+      if (mounted) {
+        setState(() {
+          isScanning = false;
+        });
+      }
     }
   }
 
@@ -478,18 +470,17 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (isScanning)
-                const CircularProgressIndicator()
-              else if (bluetoothController.connectedDevice != null)
-                Text(
-                  ' Device: ${bluetoothController.connectedDevice?.name}',
-                  style: const TextStyle(
-                    fontFamily: "Enriqueta",
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
+              bluetoothController.connectedDevice != null
+                  ? Text(
+                      ' Device: ${bluetoothController.connectedDevice!.name}',
+                      style: const TextStyle(
+                        fontFamily: "Enriqueta",
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const CircularProgressIndicator(),
               const SizedBox(height: 20),
               Text(
                 'Distance to device: ${(bluetoothController.distance / 100).toStringAsFixed(2)} meters',
@@ -552,6 +543,24 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
                 icon: const Icon(Icons.notifications_active),
                 label: const Text(
                   "Activate Buzzer",
+                  style: TextStyle(
+                    fontFamily: "Enriqueta",
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(
+                height: 20,
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  _controlBuzzer(false, shouldPrompt: true);
+                },
+                icon: const Icon(Icons.notifications_off),
+                label: const Text(
+                  "Deactivate Buzzer",
                   style: TextStyle(
                     fontFamily: "Enriqueta",
                     fontSize: 18,

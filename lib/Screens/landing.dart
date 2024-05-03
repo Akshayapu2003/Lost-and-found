@@ -1,18 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/login.dart';
-import 'package:uuid/uuid.dart';
 
 class LandingScreen extends StatelessWidget {
   const LandingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final UserController userController = Get.find<UserController>();
-    const uuid = Uuid();
-    String uniqueId = uuid.v4();
-    userController.setUUID(uniqueId);
     return Scaffold(
       body: SizedBox(
         width: MediaQuery.of(context).size.width,
