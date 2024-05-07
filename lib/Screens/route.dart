@@ -106,18 +106,20 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
         travelMode: TravelMode.driving,
       );
       if (result.points.isNotEmpty) {
-        setState(() {
-          _polylines.clear();
-          _polylines.add(Polyline(
-            polylineId: const PolylineId("poly"),
-            color: Colors.blue,
-            points: result.points
-                .map((point) => LatLng(point.latitude, point.longitude))
-                .toList(),
-            width: 10,
-          ));
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _polylines.clear();
+            _polylines.add(Polyline(
+              polylineId: const PolylineId("poly"),
+              color: Colors.blue,
+              points: result.points
+                  .map((point) => LatLng(point.latitude, point.longitude))
+                  .toList(),
+              width: 10,
+            ));
+            _isLoading = false;
+          });
+        }
       } else {
         throw 'No polyline points found';
       }
@@ -129,14 +131,16 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
   void calculateDistance() {
     if (_userController.currentPosition.value != null &&
         userController.coordinates.isNotEmpty) {
-      setState(() {
-        _distance = Geolocator.distanceBetween(
-          _userController.currentPosition.value!.latitude,
-          _userController.currentPosition.value!.longitude,
-          userController.coordinates.last.latitude,
-          userController.coordinates.last.longitude,
-        );
-      });
+      if (mounted) {
+        setState(() {
+          _distance = Geolocator.distanceBetween(
+            _userController.currentPosition.value!.latitude,
+            _userController.currentPosition.value!.longitude,
+            userController.coordinates.last.latitude,
+            userController.coordinates.last.longitude,
+          );
+        });
+      }
     }
   }
 
@@ -231,7 +235,6 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       BluetoothDevice device = scanResult.device;
       if (device.name == 'ESP32-BLE-Server') {
         Get.to(() => const ItemScreen());
-// You can add additional logic here if needed
       }
     });
     _locationSubscription = Geolocator.getPositionStream(

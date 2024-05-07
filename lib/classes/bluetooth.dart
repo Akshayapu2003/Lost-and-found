@@ -20,11 +20,6 @@ class BluetoothSetupManager {
       }
     } else {
       userController.setStartScanning(false);
-      showErrorDialog(
-        context,
-        'Please enable Bluetooth to use this feature.',
-        'Bluetooth Required',
-      );
     }
   }
 
@@ -49,20 +44,5 @@ class BluetoothSetupManager {
 
   void showSnackBar(BuildContext context, String message) {
     Get.snackbar('Permissions Required', message);
-  }
-
-  void showErrorDialog(BuildContext context, String message, String title) {
-    Get.defaultDialog(
-      title: title,
-      middleText: message,
-      actions: [
-        TextButton(
-          onPressed: () {
-            Get.back();
-          },
-          child: const Text('OK'),
-        ),
-      ],
-    );
   }
 }

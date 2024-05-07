@@ -5,3 +5,4 @@ const bleCharac = "e486a060-99b3-4510-be5a-37ea52116e05";
 const authToken = "AIzaSyCY-DCke-LhXavjGus1CpmOX8Ve9YiLg28";
 const firebaseHost = "fir-b9e95.firebaseio.com";
 const uuidCharc = "57729fe9-385b-4fcf-8871-4f96794b446f";
+const double addDeviceBottomSheetHeight = 250.0;

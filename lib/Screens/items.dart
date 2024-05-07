@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
 import 'package:main/Functions/show_dialog_signout.dart';
+import 'package:main/Screens/add_device.dart';
+import 'package:main/Screens/bottomsheet.dart';
 import 'package:main/Screens/route.dart';
 import 'package:main/classes/bluetooth.dart';
 import 'package:main/constants/constants.dart';
@@ -59,7 +61,7 @@ class ItemScreen extends StatefulWidget {
 class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   final _bluetoothSetupManager = BluetoothSetupManager();
   final _bluetoothData = BluetoothData();
-  DatabaseReference databaseReference = FirebaseDatabase.instance.ref();
+  final databaseRef = FirebaseDatabase.instance.ref();
   final FlutterBlue flutterBlue = FlutterBlue.instance;
   StreamSubscription<ScanResult>? scanSubscription;
   StreamSubscription<BluetoothState>? bluetoothStateSubscription;
@@ -85,6 +87,8 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   late Timer _timer;
   bool enabled = true;
   Uuid uuid = const Uuid();
+  final devicesMap = <String, Map<String, dynamic>>{};
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -101,6 +105,21 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
       if (state == BluetoothState.on) {
         checkAndStartScanning();
       }
+    });
+
+    final devicesRef = databaseRef.child('devices');
+    devicesRef.onValue.listen((event) {
+      final snapshot = event.snapshot;
+      devicesMap.clear();
+      for (var childSnap in snapshot.children) {
+        final deviceData = childSnap.value as Map<dynamic, dynamic>;
+        devicesMap[childSnap.key!] = {
+          'name': deviceData['name'],
+          'macAddress': deviceData['macAddress'],
+          'uniqueId': deviceData['uniqueId'],
+        };
+      }
+      setState(() {});
     });
   }
 
@@ -172,6 +191,8 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     BluetoothDevice device = scanResult.device;
     if (device.name == 'ESP32-BLE-Server' && _connectedDevice == null) {
       _connectToDevice(device, scanResult.rssi);
+    } else if (device.name == 'ESP32-BLE-Server' && _connectedDevice != null) {
+      print('Device is already connected');
     }
   }
 
@@ -222,11 +243,28 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
         rssi,
         distance,
       );
-      if (enabled) {
-        uniqueId = uuid.v4();
+
+      // Check if a unique ID exists for this device
+      final deviceMacAddress = _connectedDevice!.id.id;
+      final existingUniqueId = devicesMap[deviceMacAddress]?['uniqueId'];
+
+      if (existingUniqueId != null) {
+        uniqueId = existingUniqueId;
         sendUniqueId(uniqueId);
         enabled = false;
+      } else {
+        if (enabled) {
+          uniqueId = uuid.v4();
+          sendUniqueId(uniqueId);
+          storeDeviceInfo(
+            _connectedDevice!.name,
+            deviceMacAddress,
+            uniqueId,
+          );
+          enabled = false;
+        }
       }
+
       print("RSSI: $rssi");
     } catch (e) {
       print('Error connecting to device: $e');
@@ -407,7 +445,7 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
 
   void _navigateToGPSScreen() {
     Get.to(() => GoogleMapsScreen(
-          databaseReference: databaseReference,
+          databaseReference: databaseRef,
           uuid: uniqueId,
         ));
   }
@@ -449,9 +487,73 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     _connectedDevice?.disconnect();
   }
 
+  void storeDeviceInfo(String deviceName, String macAddress, String uniqueId) {
+    final devicesRef = databaseRef.child('devices');
+    devicesRef.child(macAddress).set({
+      'name': deviceName,
+      'macAddress': macAddress,
+      'uniqueId': uniqueId,
+    });
+  }
+
+  void _rebuildFromHomeScreen() {
+    showModalBottomSheet(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      context: context,
+      builder: (context) {
+        return AddDeviceBottomSheet(
+          startScan: () {
+            _stopScan();
+            checkAndStartScanning();
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeviceInfoBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      context: context,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.3,
+          maxChildSize: 0.8,
+          expand: false,
+          builder: (context, scrollController) {
+            return DeviceInfoBottomSheet(
+              devices: devicesMap.values.toList(),
+              onDeviceSelected: (selectedDevice) {
+                String selectedDeviceMacAddress = selectedDevice['macAddress'];
+                if (bluetoothController.connectedDevice != null &&
+                    bluetoothController.connectedDevice!.id.id ==
+                        selectedDeviceMacAddress) {
+                  print('Selected device is already connected');
+                }
+
+                Navigator.of(context).pop();
+              },
+              scrollController: scrollController,
+              rebuildParent: _rebuildFromHomeScreen,
+              onDeviceRename: updateDeviceName,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void updateDeviceName(String newName, String macAddress) {
+    final deviceRef = databaseRef.child('devices/$macAddress');
+    deviceRef.update({'name': newName});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: const Text(
@@ -463,160 +565,181 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
             color: Colors.white,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _rebuildFromHomeScreen,
+          ),
+        ],
       ),
       body: Container(
         color: Colors.black87,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              bluetoothController.connectedDevice != null
-                  ? Text(
-                      ' Device: ${bluetoothController.connectedDevice!.name}',
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    bluetoothController.connectedDevice != null
+                        ? const Text('')
+                        : const CircularProgressIndicator(),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Distance to device: ${(bluetoothController.distance / 100).toStringAsFixed(2)} meters',
                       style: const TextStyle(
                         fontFamily: "Enriqueta",
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
                         color: Colors.white,
                       ),
-                    )
-                  : const CircularProgressIndicator(),
-              const SizedBox(height: 20),
-              Text(
-                'Distance to device: ${(bluetoothController.distance / 100).toStringAsFixed(2)} meters',
-                style: const TextStyle(
-                  fontFamily: "Enriqueta",
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
+                    ),
+                    const SizedBox(height: 20),
+                    if (bluetoothController.connectedDevice != null)
+                      SizedBox(
+                        width: 150,
+                        height: 150,
+                        child: StreamBuilder<double>(
+                          stream: _bluetoothData.angleStream,
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData) {
+                              return Transform.rotate(
+                                angle: snapshot.data!,
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.blue,
+                                  ),
+                                  child: const Icon(
+                                    Icons.arrow_forward,
+                                    size: 90,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              );
+                            } else {
+                              return Transform.rotate(
+                                angle: 0.0,
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.blue,
+                                  ),
+                                  child: const Icon(
+                                    Icons.arrow_forward,
+                                    size: 90,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    const SizedBox(
+                      height: 20,
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        _controlBuzzer(true, shouldPrompt: true);
+                      },
+                      icon: const Icon(Icons.notifications_active),
+                      label: const Text(
+                        "Activate Buzzer",
+                        style: TextStyle(
+                          fontFamily: "Enriqueta",
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 20,
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        _controlBuzzer(false, shouldPrompt: true);
+                      },
+                      icon: const Icon(Icons.notifications_off),
+                      label: const Text(
+                        "Deactivate Buzzer",
+                        style: TextStyle(
+                          fontFamily: "Enriqueta",
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 20,
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return const AlertDialog(
+                              backgroundColor: Colors.black,
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Text(
+                                    "Fetching...",
+                                    style: TextStyle(
+                                      fontFamily: "Enriqueta",
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+
+                        Future.delayed(const Duration(seconds: 1), () {
+                          Navigator.of(context).pop();
+                          _navigateToGPSScreen();
+                        });
+                      },
+                      icon: const Icon(Icons.location_on_outlined),
+                      label: const Text(
+                        "Switch to GPS?",
+                        style: TextStyle(
+                          fontFamily: "Enriqueta",
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            DeviceInfoBottomSheet(
+              devices: devicesMap.values.toList(),
+              onDeviceSelected: (selectedDevice) {},
+              scrollController: null,
+              rebuildParent: _rebuildFromHomeScreen,
+              onDeviceRename: updateDeviceName,
+            ),
+            GestureDetector(
+              onTap: () => _showDeviceInfoBottomSheet(context),
+              child: const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: Icon(
+                  Icons.keyboard_arrow_up,
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 20),
-              if (bluetoothController.connectedDevice != null)
-                SizedBox(
-                  width: 150,
-                  height: 150,
-                  child: StreamBuilder<double>(
-                    stream: _bluetoothData.angleStream,
-                    builder: (context, snapshot) {
-                      if (snapshot.hasData) {
-                        return Transform.rotate(
-                          angle: snapshot.data!,
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.blue,
-                            ),
-                            child: const Icon(
-                              Icons.arrow_forward,
-                              size: 90,
-                              color: Colors.white,
-                            ),
-                          ),
-                        );
-                      } else {
-                        return Transform.rotate(
-                          angle: 0.0,
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.blue,
-                            ),
-                            child: const Icon(
-                              Icons.arrow_forward,
-                              size: 90,
-                              color: Colors.white,
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ),
-              const SizedBox(
-                height: 20,
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  _controlBuzzer(true, shouldPrompt: true);
-                },
-                icon: const Icon(Icons.notifications_active),
-                label: const Text(
-                  "Activate Buzzer",
-                  style: TextStyle(
-                    fontFamily: "Enriqueta",
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(
-                height: 20,
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  _controlBuzzer(false, shouldPrompt: true);
-                },
-                icon: const Icon(Icons.notifications_off),
-                label: const Text(
-                  "Deactivate Buzzer",
-                  style: TextStyle(
-                    fontFamily: "Enriqueta",
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(
-                height: 20,
-              ),
-              TextButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return const AlertDialog(
-                        backgroundColor: Colors.black,
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text(
-                              "Fetching...",
-                              style: TextStyle(
-                                fontFamily: "Enriqueta",
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-
-                  Future.delayed(const Duration(seconds: 1), () {
-                    Navigator.of(context).pop();
-                    _navigateToGPSScreen();
-                  });
-                },
-                icon: const Icon(Icons.location_on_outlined),
-                label: const Text(
-                  "Switch to GPS?",
-                  style: TextStyle(
-                    fontFamily: "Enriqueta",
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

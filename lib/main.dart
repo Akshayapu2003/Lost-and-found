@@ -32,6 +32,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'trAckit',
       theme: ThemeData(
+        scaffoldBackgroundColor: Colors.black,
         appBarTheme: const AppBarTheme(color: Color.fromARGB(255, 0, 0, 0)),
         colorScheme: ColorScheme.fromSwatch(
           primarySwatch: Colors.deepPurple,
