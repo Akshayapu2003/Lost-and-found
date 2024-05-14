@@ -3,9 +3,9 @@ import 'package:get/get.dart';
 import 'package:main/constants/constants.dart';
 
 class AddDeviceBottomSheet extends StatelessWidget {
-  final VoidCallback startScan;
+  final VoidCallback onScanpressed;
 
-  const AddDeviceBottomSheet({super.key, required this.startScan});
+  const AddDeviceBottomSheet({super.key, required this.onScanpressed});
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +43,8 @@ class AddDeviceBottomSheet extends StatelessWidget {
           const SizedBox(height: 32),
           ElevatedButton(
             onPressed: () {
-              startScan();
+              onScanpressed;
+              Get.back();
               Get.back();
             },
             style: ElevatedButton.styleFrom(

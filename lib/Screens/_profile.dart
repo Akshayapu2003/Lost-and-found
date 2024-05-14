@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server/gmail.dart';
 import 'package:main/Functions/snackbar.dart';
 import 'package:main/Screens/login.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -410,25 +412,27 @@ class ProfileScreen extends StatelessWidget {
 
   Future<void> _sendFeedbackByEmail(
       String feedback, BuildContext context) async {
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: 'akshaya4703@gmail.com',
-      queryParameters: {'subject': 'Feedback', 'body': feedback},
-    );
+    final smtpServer = gmail('your.email@gmail.com', 'your_password');
+
+    final message = Message()
+      ..from = Address(userController.email.value, userController.name.value)
+      ..recipients.add('akshaya4703@gmail.com')
+      ..subject = 'Feedback'
+      ..text = feedback;
 
     try {
-      await launchUrlString(emailUri.toString());
-      showSnackBar(
-        context,
-        'Feedback sent successfully!',
-      );
+      final sendReport = await send(message, smtpServer);
+      print('Message sent: ' + sendReport.toString());
+      showSnackBar(context, 'Feedback sent successfully!');
     } catch (e) {
       print('Error sending feedback: $e');
-
-      showSnackBar(
-        context,
-        'Failed to send feedback. Please try again later.',
-      );
+      showSnackBar(context, 'Failed to send feedback. Please try again later.');
     }
+  }
+
+  void showSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+    ));
   }
 }

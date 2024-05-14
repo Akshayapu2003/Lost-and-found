@@ -18,8 +18,6 @@ class BluetoothSetupManager {
         userController.setStartScanning(false);
         showSnackBar(context, "Permission is not granted");
       }
-    } else {
-      userController.setStartScanning(false);
     }
   }
 

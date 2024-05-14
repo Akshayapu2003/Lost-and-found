@@ -248,7 +248,9 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
       _updateCameraPosition(_userController.currentPosition.value!);
       calculateDistance();
       speakInstructions();
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
 
     _databaseSubscription = _coordinatesStream().listen((coordinates) {
@@ -273,6 +275,18 @@ class _GoogleMapsScreenState extends State<GoogleMapsScreen> {
     final targetLatLng =
         _userController.currentPosition.value ?? const LatLng(10.1632, 76.6413);
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: Title(
+            color: Colors.white, child: const Icon(Icons.arrow_back_sharp)),
+        actions: [
+          IconButton(
+            onPressed: () => Get.back(),
+            icon: const Icon(Icons.arrow_back_sharp),
+            alignment: Alignment.topLeft,
+          )
+        ],
+      ),
       body: Column(
         children: [
           Expanded(

@@ -5,9 +5,11 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
+import 'package:main/Functions/orientationsb.dart';
 import 'package:main/Functions/show_dialog_signout.dart';
 import 'package:main/Screens/add_device.dart';
 import 'package:main/Screens/bottomsheet.dart';
+import 'package:main/Screens/direction.dart';
 import 'package:main/Screens/route.dart';
 import 'package:main/classes/bluetooth.dart';
 import 'package:main/constants/constants.dart';
@@ -58,7 +60,8 @@ class ItemScreen extends StatefulWidget {
   _ItemScreenState createState() => _ItemScreenState();
 }
 
-class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
+class _ItemScreenState extends State<ItemScreen>
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   final _bluetoothSetupManager = BluetoothSetupManager();
   final _bluetoothData = BluetoothData();
   final databaseRef = FirebaseDatabase.instance.ref();
@@ -89,38 +92,46 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   Uuid uuid = const Uuid();
   final devicesMap = <String, Map<String, dynamic>>{};
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
+  late final AnimationController _arrowUpAnimationController;
   @override
   void initState() {
     super.initState();
+    _arrowUpAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+
+    bluetoothStateSubscription =
+        FlutterBlue.instance.state.listen(_handleBluetoothStateChange);
+  }
+
+  void initializeScreen() {
     _bluetoothSetupManager.initialize(context);
     isScanning = false;
     _streamSensorData();
     _checkConnectedDevice();
     _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      _updateDirectionalIndicators(bluetoothController.rssi);
-    });
-    bluetoothStateSubscription =
-        FlutterBlue.instance.state.listen((BluetoothState state) {
-      if (state == BluetoothState.on) {
-        checkAndStartScanning();
-      }
+      _updateDistance();
     });
 
     final devicesRef = databaseRef.child('devices');
-    devicesRef.onValue.listen((event) {
-      final snapshot = event.snapshot;
-      devicesMap.clear();
-      for (var childSnap in snapshot.children) {
-        final deviceData = childSnap.value as Map<dynamic, dynamic>;
-        devicesMap[childSnap.key!] = {
-          'name': deviceData['name'],
-          'macAddress': deviceData['macAddress'],
-          'uniqueId': deviceData['uniqueId'],
-        };
-      }
-      setState(() {});
-    });
+    devicesRef.onValue.listen(
+      (event) {
+        final snapshot = event.snapshot;
+        devicesMap.clear();
+        for (var childSnap in snapshot.children) {
+          final deviceData = childSnap.value as Map<dynamic, dynamic>;
+          devicesMap[childSnap.key!] = {
+            'name': deviceData['name'],
+            'macAddress': deviceData['macAddress'],
+            'uniqueId': deviceData['uniqueId'],
+          };
+        }
+        if (mounted) {
+          setState(() {});
+        }
+      },
+    );
   }
 
   @override
@@ -133,8 +144,6 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
         break;
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
-        _checkConnectedDevice();
-        break;
       case AppLifecycleState.detached:
         _cleanupResources();
         break;
@@ -153,6 +162,24 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     _timer.cancel();
     _streamSensorData();
     super.dispose();
+  }
+
+  void _handleBluetoothStateChange(BluetoothState state) {
+    if (state == BluetoothState.on) {
+      initializeScreen();
+    } else {
+      showBluetoothOffSnackbar();
+    }
+  }
+
+  void showBluetoothOffSnackbar() {
+    Get.snackbar(
+      'Bluetooth is Off',
+      'Please turn on Bluetooth to use this app.',
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 3),
+      backgroundColor: const Color.fromARGB(255, 124, 122, 122),
+    );
   }
 
   void _checkConnectedDevice() async {
@@ -189,8 +216,10 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
 
   void _handleScanResult(ScanResult scanResult) {
     BluetoothDevice device = scanResult.device;
+    bluetoothController.rssi = scanResult.rssi;
     if (device.name == 'ESP32-BLE-Server' && _connectedDevice == null) {
       _connectToDevice(device, scanResult.rssi);
+      isScanning = false;
     } else if (device.name == 'ESP32-BLE-Server' && _connectedDevice != null) {
       print('Device is already connected');
     }
@@ -208,9 +237,11 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
         onError: (error) {
           if (error.code != 'already_scanning') {
             print('Error during scanning: $error');
-            setState(() {
-              isScanning = false;
-            });
+            if (mounted) {
+              setState(() {
+                isScanning = false;
+              });
+            }
           }
         },
       );
@@ -221,7 +252,7 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     try {
       await device.connect();
       _connectedDevice = device;
-
+      SnackbarHelper.showDeviceOrientationSnackbar();
       List<BluetoothService> services =
           await _connectedDevice!.discoverServices();
       for (var service in services) {
@@ -244,7 +275,6 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
         distance,
       );
 
-      // Check if a unique ID exists for this device
       final deviceMacAddress = _connectedDevice!.id.id;
       final existingUniqueId = devicesMap[deviceMacAddress]?['uniqueId'];
 
@@ -275,35 +305,6 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _updateDirectionalIndicators(int rssi) {
-    if (accelerometerValues != null && accelerometerValues!.length >= 3) {
-      double accelerationX = accelerometerValues![0];
-      double accelerationY = accelerometerValues![1];
-
-      double magnitude = sqrt(pow(accelerationX, 2) +
-          pow(accelerationY, 2) +
-          pow(accelerationX, 2));
-      double normalizedX = accelerationX / magnitude;
-      double normalizedY = accelerationY / magnitude;
-
-      double orientation = atan2(-normalizedY, normalizedX);
-
-      //   double angle = atan2(accelerationX, accelerationY);
-      _bluetoothData.updateAngle(orientation);
-
-      if (bluetoothController.connectedDevice != null) {
-        if (bluetoothController.rssi > -150) {
-          _updateDistance();
-        } else {
-          print('Buzzer characteristic not found');
-          _showSwitchToGPSPrompt();
-        }
-      } else {
-        checkAndStartScanning();
-      }
-    }
-  }
-
   void _updateDistance() {
     if (bluetoothController.rssi != 0) {
       double rssiAt1Meter = -60.0;
@@ -329,19 +330,23 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   Future<void> _controlBuzzer(bool isOn, {bool shouldPrompt = false}) async {
     try {
       if (bluetoothController.buzzerCharacteristic != null) {
+        bool? confirmed;
         if (shouldPrompt) {
-          bool? confirmed = await _promptBuzzerActivation();
+          if (isOn) {
+            confirmed = await _promptBuzzerActivation();
+          } else {
+            confirmed = await _promptDeBuzzerActivation();
+          }
           if (confirmed == null || !confirmed) {
             return;
           }
         }
-
         int command = isOn ? 1 : 0;
         String commandChar = command.toString();
         List<int> commandBytes = utf8.encode(commandChar);
         await bluetoothController.buzzerCharacteristic!.write(commandBytes);
         print('Buzzer is ${isOn ? 'on' : 'off'}');
-        _showSnackbar("Buzzer is activated");
+        _showSnackbar("Buzzer is ${isOn ? 'activated' : 'deactivated'}");
         print('Buzzer command sent: $commandChar');
       } else {
         print('Buzzer characteristic not found');
@@ -402,6 +407,40 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<bool?> _promptDeBuzzerActivation() {
+    return Get.defaultDialog<bool>(
+      buttonColor: const Color.fromARGB(0, 0, 0, 0),
+      title: 'Deactivate Buzzer',
+      middleText: 'Do you want to deactivate the buzzer?',
+      actions: [
+        TextButton(
+          onPressed: () => Get.back(result: false),
+          child: const Text(
+            'No',
+            style: TextStyle(
+              fontFamily: "Enriqueta",
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Get.back(result: true),
+          child: const Text(
+            'Yes',
+            style: TextStyle(
+              fontFamily: "Enriqueta",
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> sendUniqueId(String id) async {
     try {
       if (bluetoothController.uuidCharacteristic != null) {
@@ -418,28 +457,14 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   }
 
   void _showSnackbar(String message) {
-    Get.snackbar('Buzzer Activated', message);
-  }
-
-  void _showSwitchToGPSPrompt() {
-    Get.defaultDialog(
-      title: 'Signal Strength Low',
-      middleText: 'Switch to GPS for accurate navigation?',
-      actions: [
-        TextButton(
-          onPressed: () {
-            Get.back();
-          },
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            Get.back();
-            _navigateToGPSScreen();
-          },
-          child: const Text('Switch to GPS'),
-        ),
-      ],
+    Get.snackbar(
+      'Buzzer Message',
+      message,
+      snackPosition: SnackPosition.TOP,
+      backgroundColor:
+          const Color.fromARGB(255, 132, 129, 129).withOpacity(0.8),
+      colorText: Colors.white,
+      duration: const Duration(seconds: 5),
     );
   }
 
@@ -453,17 +478,21 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
   void _streamSensorData() {
     accelerometerEvents.listen(
       (AccelerometerEvent event) {
-        setState(() {
-          accelerometerValues = [event.x, event.y, event.z];
-        });
+        if (mounted) {
+          setState(() {
+            accelerometerValues = [event.x, event.y, event.z];
+          });
+        }
       },
     );
 
     gyroscopeEvents.listen(
       (GyroscopeEvent event) {
-        setState(() {
-          gyroscopeValues = [event.x, event.y, event.z];
-        });
+        if (mounted) {
+          setState(() {
+            gyroscopeValues = [event.x, event.y, event.z];
+          });
+        }
       },
     );
   }
@@ -496,6 +525,26 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
     });
   }
 
+  void _handleScanPressed() {
+    _connectedDevice?.disconnect();
+    bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
+    uniqueId = '';
+    enabled = true;
+    isScanning = false;
+    accelerometerValues = null;
+    gyroscopeValues = null;
+    distance = 0.0;
+    isBuzzerOn = false;
+    esp32RSSI = 0;
+    scanSubscription?.cancel();
+    bluetoothStateSubscription?.cancel();
+    _timer.cancel();
+    _arrowUpAnimationController.dispose();
+    Get.off(() => const ItemScreen())?.then((_) {
+      initializeScreen();
+    });
+  }
+
   void _rebuildFromHomeScreen() {
     showModalBottomSheet(
       isScrollControlled: true,
@@ -503,10 +552,7 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
       context: context,
       builder: (context) {
         return AddDeviceBottomSheet(
-          startScan: () {
-            _stopScan();
-            checkAndStartScanning();
-          },
+          onScanpressed: _handleScanPressed,
         );
       },
     );
@@ -567,8 +613,11 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _rebuildFromHomeScreen,
+            icon: const Icon(
+              Icons.refresh,
+              color: Colors.white,
+            ),
+            onPressed: _handleScanPressed,
           ),
         ],
       ),
@@ -581,97 +630,93 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    bluetoothController.connectedDevice != null
-                        ? const Text('')
-                        : const CircularProgressIndicator(),
-                    const SizedBox(height: 20),
-                    Text(
-                      'Distance to device: ${(bluetoothController.distance / 100).toStringAsFixed(2)} meters',
-                      style: const TextStyle(
-                        fontFamily: "Enriqueta",
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+                    isScanning
+                        ? const Column(
+                            children: [
+                              Text(
+                                'Searching for devices',
+                                style: TextStyle(
+                                  fontFamily: "Enriqueta",
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(
+                                height: 20,
+                              ),
+                              CircularProgressIndicator(),
+                            ],
+                          )
+                        : Text(
+                            'Device: ${bluetoothController.connectedDevice?.name}',
+                            style: const TextStyle(
+                              fontFamily: "Enriqueta",
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                     if (bluetoothController.connectedDevice != null)
-                      SizedBox(
+                      const SizedBox(height: 20),
+                    if (bluetoothController.connectedDevice != null)
+                      Text(
+                        'Distance to device: ${(bluetoothController.distance / 100).toStringAsFixed(2)} meters',
+                        style: const TextStyle(
+                          fontFamily: "Enriqueta",
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    if (bluetoothController.connectedDevice != null)
+                      const SizedBox(height: 20),
+                    if (bluetoothController.connectedDevice != null)
+                      const SizedBox(
                         width: 150,
                         height: 150,
-                        child: StreamBuilder<double>(
-                          stream: _bluetoothData.angleStream,
-                          builder: (context, snapshot) {
-                            if (snapshot.hasData) {
-                              return Transform.rotate(
-                                angle: snapshot.data!,
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.blue,
-                                  ),
-                                  child: const Icon(
-                                    Icons.arrow_forward,
-                                    size: 90,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              );
-                            } else {
-                              return Transform.rotate(
-                                angle: 0.0,
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.blue,
-                                  ),
-                                  child: const Icon(
-                                    Icons.arrow_forward,
-                                    size: 90,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              );
-                            }
-                          },
+                        child: IndoorPositioning(),
+                      ),
+                    if (bluetoothController.connectedDevice != null)
+                      const SizedBox(
+                        height: 20,
+                      ),
+                    if (bluetoothController.connectedDevice != null)
+                      TextButton.icon(
+                        onPressed: () {
+                          _controlBuzzer(true, shouldPrompt: true);
+                        },
+                        icon: const Icon(Icons.notifications_active),
+                        label: const Text(
+                          "Activate Buzzer",
+                          style: TextStyle(
+                            fontFamily: "Enriqueta",
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                    const SizedBox(
-                      height: 20,
-                    ),
-                    TextButton.icon(
-                      onPressed: () {
-                        _controlBuzzer(true, shouldPrompt: true);
-                      },
-                      icon: const Icon(Icons.notifications_active),
-                      label: const Text(
-                        "Activate Buzzer",
-                        style: TextStyle(
-                          fontFamily: "Enriqueta",
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
+                    if (bluetoothController.connectedDevice != null)
+                      const SizedBox(
+                        height: 20,
+                      ),
+                    if (bluetoothController.connectedDevice != null)
+                      TextButton.icon(
+                        onPressed: () {
+                          _controlBuzzer(false, shouldPrompt: true);
+                        },
+                        icon: const Icon(Icons.notifications_off),
+                        label: const Text(
+                          "Deactivate Buzzer",
+                          style: TextStyle(
+                            fontFamily: "Enriqueta",
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(
-                      height: 20,
-                    ),
-                    TextButton.icon(
-                      onPressed: () {
-                        _controlBuzzer(false, shouldPrompt: true);
-                      },
-                      icon: const Icon(Icons.notifications_off),
-                      label: const Text(
-                        "Deactivate Buzzer",
-                        style: TextStyle(
-                          fontFamily: "Enriqueta",
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
                     const SizedBox(
                       height: 20,
                     ),
@@ -707,7 +752,7 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
                           _navigateToGPSScreen();
                         });
                       },
-                      icon: const Icon(Icons.location_on_outlined),
+                      icon: const Icon(Icons.navigation),
                       label: const Text(
                         "Switch to GPS?",
                         style: TextStyle(
@@ -731,14 +776,38 @@ class _ItemScreenState extends State<ItemScreen> with WidgetsBindingObserver {
             ),
             GestureDetector(
               onTap: () => _showDeviceInfoBottomSheet(context),
-              child: const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Icon(
-                  Icons.keyboard_arrow_up,
-                  color: Colors.white,
-                ),
+              child: Column(
+                children: [
+                  ScaleTransition(
+                    scale: Tween<double>(
+                      begin: 2.0,
+                      end: 1.2,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: _arrowUpAnimationController,
+                        curve: Curves.easeInOutCubic,
+                      ),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(
+                        Icons.keyboard_arrow_up,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    'Touch for more options',
+                    style: TextStyle(
+                      fontFamily: "Enriqueta",
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
-            ),
+            )
           ],
         ),
       ),

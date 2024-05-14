@@ -27,10 +27,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -49,6 +46,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '717878215483',
     projectId: 'fir-b9e95',
     authDomain: 'fir-b9e95.firebaseapp.com',
+    databaseURL: 'https://fir-b9e95-default-rtdb.firebaseio.com',
     storageBucket: 'fir-b9e95.appspot.com',
   );
 
@@ -57,6 +55,7 @@ class DefaultFirebaseOptions {
     appId: '1:717878215483:android:5e9ff617bae71aa9d9ed1e',
     messagingSenderId: '717878215483',
     projectId: 'fir-b9e95',
+    databaseURL: 'https://fir-b9e95-default-rtdb.firebaseio.com',
     storageBucket: 'fir-b9e95.appspot.com',
   );
 
@@ -65,16 +64,33 @@ class DefaultFirebaseOptions {
     appId: '1:717878215483:ios:7390d02f7eae1027d9ed1e',
     messagingSenderId: '717878215483',
     projectId: 'fir-b9e95',
+    databaseURL: 'https://fir-b9e95-default-rtdb.firebaseio.com',
     storageBucket: 'fir-b9e95.appspot.com',
+    androidClientId: '717878215483-d4jjafk5bh0d0tjqpaoatco6llgheb13.apps.googleusercontent.com',
+    iosClientId: '717878215483-543e3e3p2jj1p0g7b233ndk9t3cpjt5f.apps.googleusercontent.com',
     iosBundleId: 'com.example.main',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyC1rfnG50syD8kPOJnxWcyjdr4OvnE2m6M',
-    appId: '1:717878215483:ios:8b9c207a29220567d9ed1e',
+    appId: '1:717878215483:ios:7390d02f7eae1027d9ed1e',
     messagingSenderId: '717878215483',
     projectId: 'fir-b9e95',
+    databaseURL: 'https://fir-b9e95-default-rtdb.firebaseio.com',
     storageBucket: 'fir-b9e95.appspot.com',
-    iosBundleId: 'com.example.main.RunnerTests',
+    androidClientId: '717878215483-d4jjafk5bh0d0tjqpaoatco6llgheb13.apps.googleusercontent.com',
+    iosClientId: '717878215483-543e3e3p2jj1p0g7b233ndk9t3cpjt5f.apps.googleusercontent.com',
+    iosBundleId: 'com.example.main',
   );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyDqb3HV3FodmGc78h4imiF339BF1CorPx8',
+    appId: '1:717878215483:web:d4ef8b46409d7d97d9ed1e',
+    messagingSenderId: '717878215483',
+    projectId: 'fir-b9e95',
+    authDomain: 'fir-b9e95.firebaseapp.com',
+    databaseURL: 'https://fir-b9e95-default-rtdb.firebaseio.com',
+    storageBucket: 'fir-b9e95.appspot.com',
+  );
+
 }

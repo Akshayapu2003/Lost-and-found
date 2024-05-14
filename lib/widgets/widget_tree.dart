@@ -31,7 +31,7 @@ class _WidgetTreeState extends State<WidgetTree> {
               label: ""),
           NavigationDestination(
               icon: Icon(
-                Icons.location_on_outlined,
+                Icons.navigation,
                 color: Colors.white,
               ),
               label: ""),

@@ -6,8 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:main/Functions/show_dialog_signout.dart';
 import 'package:main/GetxControllers/controllers.dart';
 
-void main() => runApp(const HomeScreen());
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -19,11 +17,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final Completer<GoogleMapController> mapController =
       Completer<GoogleMapController>();
   final UserController userController = Get.find<UserController>();
+  StreamSubscription<Position>? _locationSubscription;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
+  }
+
+  void _updateUserLocation(Position position) {
+    userController
+        .setCurrentLocation(LatLng(position.latitude, position.longitude));
+    updateCameraPosition(userController.currentPosition.value!);
   }
 
   void _getCurrentLocation() async {
@@ -46,25 +51,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return;
       }
     }
+    if (serviceEnabled) {
+      try {
+        Position positionLowAccuracy = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+        );
+        _updateUserLocation(positionLowAccuracy);
 
-    try {
-      Position positionLowAccuracy = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-      );
-      userController.setCurrentLocation(
-          LatLng(positionLowAccuracy.latitude, positionLowAccuracy.longitude));
-
-      updateCameraPosition(userController.currentPosition.value!);
-
-      Position positionHighAccuracy = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      userController.setCurrentLocation(LatLng(
-          positionHighAccuracy.latitude, positionHighAccuracy.longitude));
-      updateCameraPosition(userController.currentPosition.value!);
-    } catch (e) {
-      print('Error: $e');
-      showErrorDialog(context, 'Error getting the current location.', 'Error');
+        Position positionHighAccuracy = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        _updateUserLocation(positionHighAccuracy);
+        _locationSubscription =
+            Geolocator.getPositionStream().listen(_updateUserLocation);
+      } catch (e) {
+        print('Error: $e');
+        showErrorDialog(
+            context, 'Error getting the current location.', 'Error');
+      }
     }
   }
 
@@ -78,6 +82,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       await controller
           .animateCamera(CameraUpdate.newCameraPosition(newCameraPosition));
     }
+  }
+
+  @override
+  void dispose() {
+    _locationSubscription?.cancel();
+    super.dispose();
   }
 
   @override
