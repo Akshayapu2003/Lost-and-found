@@ -159,6 +159,7 @@ class _ItemScreenState extends State<ItemScreen>
     scanSubscription?.cancel();
     bluetoothStateSubscription?.cancel();
     _connectedDevice?.disconnect();
+    _arrowUpAnimationController.dispose();
     _timer.cancel();
     _streamSensorData();
     super.dispose();
@@ -525,34 +526,51 @@ class _ItemScreenState extends State<ItemScreen>
     });
   }
 
-  void _handleScanPressed() {
-    _connectedDevice?.disconnect();
-    bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
-    uniqueId = '';
-    enabled = true;
-    isScanning = false;
-    accelerometerValues = null;
-    gyroscopeValues = null;
-    distance = 0.0;
-    isBuzzerOn = false;
-    esp32RSSI = 0;
-    scanSubscription?.cancel();
-    bluetoothStateSubscription?.cancel();
-    _timer.cancel();
-    _arrowUpAnimationController.dispose();
-    Get.off(() => const ItemScreen())?.then((_) {
+  void _handleScanPressed({bool fromBottomSheet = false}) {
+    print('_handleScanPressed called, fromBottomSheet: $fromBottomSheet');
+    if (mounted) {
+      setState(() {
+        _connectedDevice?.disconnect();
+        bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
+        uniqueId = '';
+        enabled = true;
+        isScanning = false;
+        accelerometerValues = null;
+        gyroscopeValues = null;
+        distance = 0.0;
+        isBuzzerOn = false;
+        esp32RSSI = 0;
+        scanSubscription?.cancel();
+        bluetoothStateSubscription?.cancel();
+        _timer.cancel();
+      });
+
+      if (fromBottomSheet) {
+        print('Attempting to close bottom sheet');
+        Navigator.pop(context);
+      }
+
+      print('Calling initializeScreen()');
       initializeScreen();
-    });
+      print('Calling startScan()');
+      startScan();
+    }
   }
 
   void _rebuildFromHomeScreen() {
+    print('_rebuildFromHomeScreen called');
     showModalBottomSheet(
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       context: context,
       builder: (context) {
         return AddDeviceBottomSheet(
-          onScanpressed: _handleScanPressed,
+          onScanpressed: () {
+            print(
+                'onScanPressed callback triggered from _rebuildFromHomeScreen');
+            Navigator.pop(context); // Explicitly close the bottom sheet
+            _handleScanPressed(fromBottomSheet: true);
+          },
         );
       },
     );

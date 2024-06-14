@@ -45,7 +45,6 @@ class AddDeviceBottomSheet extends StatelessWidget {
             onPressed: () {
               onScanpressed;
               Get.back();
-              Get.back();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,

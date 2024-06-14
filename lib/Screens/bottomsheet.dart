@@ -147,6 +147,7 @@ class DeviceInfoBottomSheet extends StatelessWidget {
                   padding: const EdgeInsets.all(16.0),
                   child: ElevatedButton.icon(
                     onPressed: () {
+                      Get.back();
                       rebuildParent();
                     },
                     icon: const Icon(
