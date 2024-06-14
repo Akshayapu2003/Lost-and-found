@@ -41,6 +41,10 @@ class BluetoothSetupManager {
   }
 
   void showSnackBar(BuildContext context, String message) {
-    Get.snackbar('Permissions Required', message);
+    Get.snackbar(
+      'Permissions Required',
+      message,
+      snackPosition: SnackPosition.TOP,
+    );
   }
 }

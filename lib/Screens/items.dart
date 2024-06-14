@@ -612,13 +612,31 @@ class _ItemScreenState extends State<ItemScreen>
               devices: devicesMap.values.toList(),
               onDeviceSelected: (selectedDevice) {
                 String selectedDeviceMacAddress = selectedDevice['macAddress'];
-                if (bluetoothController.connectedDevice != null &&
-                    bluetoothController.connectedDevice!.id.id ==
-                        selectedDeviceMacAddress) {
-                  print('Selected device is already connected');
-                }
+                BluetoothDevice? deviceToConnect;
+                bool isDeviceNearby = false;
+                StreamSubscription<ScanResult>? scanSubscription =
+                    flutterBlue.scan().listen((scanResult) {
+                  if (scanResult.device.id.id == selectedDeviceMacAddress) {
+                    deviceToConnect = scanResult.device;
+                    isDeviceNearby = true;
+                  }
+                }, cancelOnError: true);
+                Future.delayed(const Duration(seconds: 5), () {
+                  scanSubscription.cancel();
 
-                Navigator.of(context).pop();
+                  if (isDeviceNearby) {
+                    _connectToSpecificDevice(
+                        deviceToConnect!, selectedDevice['rssi'] ?? 0);
+                  } else {
+                    Get.snackbar(
+                      'Device Not Found',
+                      'The selected device is not nearby or not discoverable.',
+                      snackPosition: SnackPosition.TOP,
+                      duration: const Duration(seconds: 3),
+                    );
+                  }
+                  Navigator.of(context).pop();
+                });
               },
               scrollController: scrollController,
               rebuildParent: _rebuildFromHomeScreen,
@@ -628,6 +646,19 @@ class _ItemScreenState extends State<ItemScreen>
         );
       },
     );
+  }
+
+  void _connectToSpecificDevice(BluetoothDevice device, int rssi) async {
+    if (bluetoothController.connectedDevice != null) {
+      try {
+        await bluetoothController.connectedDevice!.disconnect();
+        print('Previous device disconnected successfully');
+      } catch (e) {
+        print('Error disconnecting previous device: $e');
+      }
+    }
+
+    _connectToDevice(device, rssi);
   }
 
   void updateDeviceName(String newName, String macAddress) {
