@@ -43,7 +43,7 @@ class AddDeviceBottomSheet extends StatelessWidget {
           const SizedBox(height: 32),
           ElevatedButton(
             onPressed: () {
-              onScanpressed;
+              onScanpressed();
               Get.back();
             },
             style: ElevatedButton.styleFrom(

@@ -216,37 +216,49 @@ class _ItemScreenState extends State<ItemScreen>
   }
 
   void _handleScanResult(ScanResult scanResult) {
+    print('_handleScanResult called for device: ${scanResult.device.name}');
     BluetoothDevice device = scanResult.device;
     bluetoothController.rssi = scanResult.rssi;
-    if (device.name == 'ESP32-BLE-Server' && _connectedDevice == null) {
+    if (device.name == 'ESP32-BLE-Server' &&
+        bluetoothController.connectedDevice == null) {
       _connectToDevice(device, scanResult.rssi);
-      isScanning = false;
-    } else if (device.name == 'ESP32-BLE-Server' && _connectedDevice != null) {
-      print('Device is already connected');
+      scanSubscription?.cancel(); // Stop scanning once we find our device
+      setState(() {
+        isScanning = false;
+      });
     }
   }
 
   void startScan() {
-    if (scanSubscription == null) {
-      if (mounted) {
+    print('startScan() called');
+    _stopScan();
+
+    setState(() {
+      isScanning = true;
+    });
+
+    scanSubscription =
+        flutterBlue.scan(timeout: const Duration(seconds: 10)).listen(
+      (scanResult) {
+        print('Device found: ${scanResult.device.name}');
+        _handleScanResult(scanResult);
+      },
+      onDone: () {
+        print('Scan finished');
         setState(() {
-          isScanning = true;
-        });
-      }
-      scanSubscription = flutterBlue.scan().listen(
-        _handleScanResult,
-        onError: (error) {
-          if (error.code != 'already_scanning') {
-            print('Error during scanning: $error');
-            if (mounted) {
-              setState(() {
-                isScanning = false;
-              });
-            }
+          isScanning = false;
+          if (bluetoothController.connectedDevice == null) {
+            bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
           }
-        },
-      );
-    }
+        });
+      },
+      onError: (error) {
+        print('Error during scanning: $error');
+        setState(() {
+          isScanning = false;
+        });
+      },
+    );
   }
 
   void _connectToDevice(BluetoothDevice device, int rssi) async {
@@ -526,35 +538,44 @@ class _ItemScreenState extends State<ItemScreen>
     });
   }
 
-  void _handleScanPressed({bool fromBottomSheet = false}) {
+  void _handleScanPressed({bool fromBottomSheet = false}) async {
     print('_handleScanPressed called, fromBottomSheet: $fromBottomSheet');
-    if (mounted) {
-      setState(() {
-        _connectedDevice?.disconnect();
-        bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
-        uniqueId = '';
-        enabled = true;
-        isScanning = false;
-        accelerometerValues = null;
-        gyroscopeValues = null;
-        distance = 0.0;
-        isBuzzerOn = false;
-        esp32RSSI = 0;
-        scanSubscription?.cancel();
-        bluetoothStateSubscription?.cancel();
-        _timer.cancel();
-      });
 
-      if (fromBottomSheet) {
-        print('Attempting to close bottom sheet');
-        Navigator.pop(context);
+    _stopScan();
+
+    // Disconnect current device
+    if (bluetoothController.connectedDevice != null) {
+      try {
+        await bluetoothController.connectedDevice!.disconnect();
+        print('Device disconnected successfully');
+      } catch (e) {
+        print('Error disconnecting device: $e');
       }
-
-      print('Calling initializeScreen()');
-      initializeScreen();
-      print('Calling startScan()');
-      startScan();
     }
+    setState(() {
+      bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
+      uniqueId = '';
+      enabled = true;
+      accelerometerValues = null;
+      gyroscopeValues = null;
+      distance = 0.0;
+      isBuzzerOn = false;
+      esp32RSSI = 0;
+      isScanning = true;
+    });
+
+    scanSubscription?.cancel();
+    bluetoothStateSubscription?.cancel();
+    _timer.cancel();
+
+    _bluetoothSetupManager.initialize(context);
+    _streamSensorData();
+    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      _updateDistance();
+    });
+
+    await Future.delayed(const Duration(seconds: 50));
+    startScan();
   }
 
   void _rebuildFromHomeScreen() {
