@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
 import 'package:main/Functions/orientationsb.dart';
-import 'package:main/Functions/show_dialog_signout.dart';
 import 'package:main/Screens/add_device.dart';
 import 'package:main/Screens/bottomsheet.dart';
 import 'package:main/Screens/direction.dart';
@@ -15,6 +14,7 @@ import 'package:main/classes/bluetooth.dart';
 import 'package:main/constants/constants.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:crypto/crypto.dart';
 
 class BluetoothData {
   final StreamController<double> _angleStreamController =
@@ -153,6 +153,12 @@ class _ItemScreenState extends State<ItemScreen>
     }
   }
 
+  String _hashPassword(String password) {
+    final bytes = utf8.encode(password);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
   @override
   void dispose() {
     _bluetoothData.dispose();
@@ -179,7 +185,8 @@ class _ItemScreenState extends State<ItemScreen>
       'Please turn on Bluetooth to use this app.',
       snackPosition: SnackPosition.BOTTOM,
       duration: const Duration(seconds: 3),
-      backgroundColor: const Color.fromARGB(255, 124, 122, 122),
+      backgroundColor: kSnackbarBackgroundColor,
+      colorText: kSnackbarTextColor,
     );
   }
 
@@ -261,42 +268,97 @@ class _ItemScreenState extends State<ItemScreen>
     );
   }
 
-  void _connectToDevice(BluetoothDevice device, int rssi) async {
+  Future<void> _connectToDevice(BluetoothDevice device, int rssi) async {
     try {
       await device.connect();
       _connectedDevice = device;
-      SnackbarHelper.showDeviceOrientationSnackbar();
-      List<BluetoothService> services =
-          await _connectedDevice!.discoverServices();
-      for (var service in services) {
-        if (service.uuid == Guid(bleCharac)) {
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == Guid(buzzerCharc)) {
-              _buzzerCharacteristic = characteristic;
-            } else if (characteristic.uuid == Guid(uuidCharc)) {
-              _uuidCharacteristic = characteristic;
+      final deviceMacAddress = _connectedDevice!.id.id;
+      final passwordSnapshot =
+          await databaseRef.child('passwords').child(deviceMacAddress).get();
+
+      if (passwordSnapshot.exists) {
+        String? enteredPassword = await _promptForPassword();
+        if (enteredPassword != null) {
+          String hashedEnteredPassword = _hashPassword(enteredPassword);
+          bool isPasswordValid =
+              hashedEnteredPassword == passwordSnapshot.value.toString();
+          if (isPasswordValid) {
+            List<BluetoothService> services =
+                await _connectedDevice!.discoverServices();
+            for (var service in services) {
+              if (service.uuid == Guid(bleCharac)) {
+                for (var characteristic in service.characteristics) {
+                  if (characteristic.uuid == Guid(buzzerCharc)) {
+                    _buzzerCharacteristic = characteristic;
+                  } else if (characteristic.uuid == Guid(uuidCharc)) {
+                    _uuidCharacteristic = characteristic;
+                  }
+                }
+              }
             }
+            SnackbarHelper.showDeviceOrientationSnackbar();
+            bluetoothController.updateConnectedDevice(
+              _connectedDevice,
+              _buzzerCharacteristic,
+              _uuidCharacteristic,
+              rssi,
+              distance,
+            );
+
+            final existingUniqueId = devicesMap[deviceMacAddress]?['uniqueId'];
+
+            if (existingUniqueId != null) {
+              uniqueId = existingUniqueId;
+              sendUniqueId(uniqueId);
+              enabled = false;
+            } else {
+              if (enabled) {
+                uniqueId = uuid.v4();
+                sendUniqueId(uniqueId);
+                storeDeviceInfo(
+                  _connectedDevice!.name,
+                  deviceMacAddress,
+                  uniqueId,
+                );
+                enabled = false;
+              }
+            }
+          } else {
+            showErrorDialog(
+                context, 'Incorrect password', 'Authentication Error');
           }
         }
-      }
-
-      bluetoothController.updateConnectedDevice(
-        _connectedDevice,
-        _buzzerCharacteristic,
-        _uuidCharacteristic,
-        rssi,
-        distance,
-      );
-
-      final deviceMacAddress = _connectedDevice!.id.id;
-      final existingUniqueId = devicesMap[deviceMacAddress]?['uniqueId'];
-
-      if (existingUniqueId != null) {
-        uniqueId = existingUniqueId;
-        sendUniqueId(uniqueId);
-        enabled = false;
       } else {
-        if (enabled) {
+        String? newPassword = await _promptForNewPassword();
+        if (newPassword != null) {
+          String hashedPassword = _hashPassword(newPassword);
+          await databaseRef
+              .child('passwords')
+              .child(deviceMacAddress)
+              .set(hashedPassword);
+
+          List<BluetoothService> services =
+              await _connectedDevice!.discoverServices();
+          for (var service in services) {
+            if (service.uuid == Guid(bleCharac)) {
+              for (var characteristic in service.characteristics) {
+                if (characteristic.uuid == Guid(buzzerCharc)) {
+                  _buzzerCharacteristic = characteristic;
+                } else if (characteristic.uuid == Guid(uuidCharc)) {
+                  _uuidCharacteristic = characteristic;
+                }
+              }
+            }
+          }
+
+          bluetoothController.updateConnectedDevice(
+            _connectedDevice,
+            _buzzerCharacteristic,
+            _uuidCharacteristic,
+            rssi,
+            distance,
+          );
+
           uniqueId = uuid.v4();
           sendUniqueId(uniqueId);
           storeDeviceInfo(
@@ -307,8 +369,6 @@ class _ItemScreenState extends State<ItemScreen>
           enabled = false;
         }
       }
-
-      print("RSSI: $rssi");
     } catch (e) {
       print('Error connecting to device: $e');
       showErrorDialog(
@@ -316,6 +376,70 @@ class _ItemScreenState extends State<ItemScreen>
           'Failed to connect to the device. Please try again.',
           'Connection Error');
     }
+  }
+
+  Future<String?> _promptForPassword() async {
+    String? password;
+    await Get.defaultDialog<String>(
+      title: 'Enter Password',
+      middleText: 'Please enter the password for this device.',
+      textConfirm: 'Submit',
+      textCancel: 'Cancel',
+      confirmTextColor: kDialogTextColor,
+      cancelTextColor: kDialogTextColor,
+      backgroundColor: kDialogBackgroundColor,
+      content: TextField(
+        obscureText: true,
+        onChanged: (value) {
+          password = value;
+        },
+        style: const TextStyle(color: kDialogTextColor),
+        decoration: InputDecoration(
+          fillColor: Colors.white24,
+          filled: true,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8.0),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+      onConfirm: () {
+        Get.back(result: password);
+      },
+    );
+    return password;
+  }
+
+  Future<String?> _promptForNewPassword() async {
+    String? password;
+    await Get.defaultDialog<String>(
+      title: 'Set Password',
+      middleText: 'Please set a new password for this device.',
+      textConfirm: 'Submit',
+      textCancel: 'Cancel',
+      confirmTextColor: kDialogTextColor,
+      cancelTextColor: kDialogTextColor,
+      backgroundColor: kDialogBackgroundColor,
+      content: TextField(
+        obscureText: true,
+        onChanged: (value) {
+          password = value;
+        },
+        style: const TextStyle(color: kDialogTextColor),
+        decoration: InputDecoration(
+          fillColor: Colors.white24,
+          filled: true,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8.0),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+      onConfirm: () {
+        Get.back(result: password);
+      },
+    );
+    return password;
   }
 
   void _updateDistance() {
@@ -388,69 +512,33 @@ class _ItemScreenState extends State<ItemScreen>
 
   Future<bool?> _promptBuzzerActivation() {
     return Get.defaultDialog<bool>(
-      buttonColor: const Color.fromARGB(0, 0, 0, 0),
+      buttonColor: kDialogBackgroundColor,
       title: 'Activate Buzzer',
       middleText: 'Do you want to activate the buzzer?',
-      actions: [
-        TextButton(
-          onPressed: () => Get.back(result: false),
-          child: const Text(
-            'No',
-            style: TextStyle(
-              fontFamily: "Enriqueta",
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        TextButton(
-          onPressed: () => Get.back(result: true),
-          child: const Text(
-            'Yes',
-            style: TextStyle(
-              fontFamily: "Enriqueta",
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ],
+      textConfirm: 'Yes',
+      textCancel: 'No',
+      confirmTextColor: kDialogTextColor,
+      cancelTextColor: kDialogTextColor,
+      backgroundColor: kDialogBackgroundColor,
+      actions: [],
+      onConfirm: () => Get.back(result: true),
+      onCancel: () => Get.back(result: false),
     );
   }
 
   Future<bool?> _promptDeBuzzerActivation() {
     return Get.defaultDialog<bool>(
-      buttonColor: const Color.fromARGB(0, 0, 0, 0),
+      buttonColor: kDialogBackgroundColor,
       title: 'Deactivate Buzzer',
       middleText: 'Do you want to deactivate the buzzer?',
-      actions: [
-        TextButton(
-          onPressed: () => Get.back(result: false),
-          child: const Text(
-            'No',
-            style: TextStyle(
-              fontFamily: "Enriqueta",
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        TextButton(
-          onPressed: () => Get.back(result: true),
-          child: const Text(
-            'Yes',
-            style: TextStyle(
-              fontFamily: "Enriqueta",
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ],
+      textConfirm: 'Yes',
+      textCancel: 'No',
+      confirmTextColor: kDialogTextColor,
+      cancelTextColor: kDialogTextColor,
+      backgroundColor: kDialogBackgroundColor,
+      actions: [],
+      onConfirm: () => Get.back(result: true),
+      onCancel: () => Get.back(result: false),
     );
   }
 
@@ -474,10 +562,20 @@ class _ItemScreenState extends State<ItemScreen>
       'Buzzer Message',
       message,
       snackPosition: SnackPosition.TOP,
-      backgroundColor:
-          const Color.fromARGB(255, 132, 129, 129).withOpacity(0.8),
-      colorText: Colors.white,
+      backgroundColor: kSnackbarBackgroundColor,
+      colorText: kSnackbarTextColor,
       duration: const Duration(seconds: 5),
+    );
+  }
+
+  void showErrorDialog(BuildContext context, String message, String title) {
+    Get.defaultDialog(
+      title: title,
+      middleText: message,
+      textConfirm: 'OK',
+      confirmTextColor: kDialogTextColor,
+      backgroundColor: kDialogBackgroundColor,
+      onConfirm: () => Get.back(),
     );
   }
 
@@ -512,6 +610,7 @@ class _ItemScreenState extends State<ItemScreen>
 
   void _stopScan() {
     if (isScanning) {
+      flutterBlue.stopScan();
       scanSubscription?.cancel();
       isScanning = false;
       if (mounted) {
@@ -540,10 +639,7 @@ class _ItemScreenState extends State<ItemScreen>
 
   void _handleScanPressed({bool fromBottomSheet = false}) async {
     print('_handleScanPressed called, fromBottomSheet: $fromBottomSheet');
-
     _stopScan();
-
-    // Disconnect current device
     if (bluetoothController.connectedDevice != null) {
       try {
         await bluetoothController.connectedDevice!.disconnect();
@@ -573,8 +669,6 @@ class _ItemScreenState extends State<ItemScreen>
     _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       _updateDistance();
     });
-
-    await Future.delayed(const Duration(seconds: 50));
     startScan();
   }
 
@@ -589,7 +683,7 @@ class _ItemScreenState extends State<ItemScreen>
           onScanpressed: () {
             print(
                 'onScanPressed callback triggered from _rebuildFromHomeScreen');
-            Navigator.pop(context); // Explicitly close the bottom sheet
+            Navigator.pop(context);
             _handleScanPressed(fromBottomSheet: true);
           },
         );
@@ -632,6 +726,9 @@ class _ItemScreenState extends State<ItemScreen>
                       'Device Not Found',
                       'The selected device is not nearby or not discoverable.',
                       snackPosition: SnackPosition.TOP,
+                      backgroundColor: const Color.fromARGB(255, 132, 129, 129)
+                          .withOpacity(0.8),
+                      colorText: Colors.white,
                       duration: const Duration(seconds: 3),
                     );
                   }

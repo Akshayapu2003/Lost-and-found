@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:get/get.dart';
 import 'package:main/GetxControllers/controllers.dart';
+import 'package:main/constants/constants.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class BluetoothSetupManager {
@@ -45,6 +46,9 @@ class BluetoothSetupManager {
       'Permissions Required',
       message,
       snackPosition: SnackPosition.TOP,
+      backgroundColor: kSnackbarBackgroundColor,
+      colorText: kSnackbarTextColor,
+      duration: const Duration(seconds: 3),
     );
   }
 }

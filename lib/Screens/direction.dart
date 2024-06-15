@@ -124,7 +124,7 @@ class _IndoorPositioningState extends State<IndoorPositioning> {
   @override
   Widget build(BuildContext context) {
     return Transform.rotate(
-      angle: atan2(-_deviceDirection.y, _deviceDirection.x),
+      angle: atan2(_deviceDirection.y, -_deviceDirection.x),
       child: Container(
         width: 100,
         height: 100,
