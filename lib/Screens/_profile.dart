@@ -6,7 +6,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/login.dart';
 import 'package:main/constants/constants.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 class ProfileScreen extends StatelessWidget {
   ProfileScreen({super.key});
@@ -288,15 +287,13 @@ class ProfileScreen extends StatelessWidget {
     switch (title.toLowerCase()) {
       case 'phone':
         iconData = Icons.call;
-        onTap = () => _launchPhone(value);
         break;
       case 'email':
         iconData = Icons.email;
-        onTap = () => _launchEmail(value);
         break;
       case 'signout':
         iconData = Icons.logout_outlined;
-        onTap = () => logout(context);
+        onTap = () => _confirmSignOut(context);
         break;
       case 'feedback':
         iconData = Icons.feedback;
@@ -337,6 +334,34 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final bool? shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, false);
+            },
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, true);
+            },
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSignOut ?? false) {
+      await logout(context);
+    }
+  }
+
   Future<void> logout(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -349,29 +374,6 @@ class ProfileScreen extends StatelessWidget {
     } catch (e) {
       print('Error logging out: $e');
       showSnackBar(context, 'Error logging out: $e');
-    }
-  }
-
-  void _launchPhone(String phoneNumber) async {
-    print('Launching phone call to $phoneNumber');
-    final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
-    if (await canLaunchUrlString(phoneUri.toString())) {
-      await launchUrlString(phoneUri.toString());
-    } else {
-      print('Could not launch $phoneUri');
-    }
-  }
-
-  void _launchEmail(String emailAddress) async {
-    print('Launching email composer for $emailAddress');
-    final Uri emailLaunchUri = Uri(
-        scheme: 'mailto',
-        path: emailAddress,
-        queryParameters: {'subject': 'Subject', 'body': 'Body'});
-    if (await canLaunchUrlString(emailLaunchUri.toString())) {
-      await launchUrlString(emailLaunchUri.toString());
-    } else {
-      print('Could not launch $emailLaunchUri');
     }
   }
 
