@@ -810,219 +810,253 @@ class _ItemScreenState extends State<ItemScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text(
-          'Navigation',
-          style: TextStyle(
-            fontFamily: "Enriqueta",
-            fontSize: 20,
-            fontWeight: FontWeight.w500,
-            color: Colors.white,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.refresh,
-              color: Colors.white,
+    Future onPop() {
+      return showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Are you sure?'),
+              content: const Text('Are you sure, You want to leave this page?'),
+              actions: [
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, false);
+                    },
+                    child: const Text('Never-mind')),
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, true);
+                    },
+                    child: const Text('Leave'))
+              ],
+            );
+          });
+    }
+
+    return PopScope(
+        canPop: false,
+        onPopInvoked: (bool didPop) async {
+          if (didPop) {
+            return;
+          }
+          final bool shouldpop = await onPop() ?? false;
+          if (context.mounted && shouldpop) {
+            Navigator.pop(context);
+          }
+        },
+        child: Scaffold(
+          key: _scaffoldKey,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            title: const Text(
+              'Navigation',
+              style: TextStyle(
+                fontFamily: "Enriqueta",
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
             ),
-            onPressed: _handleScanPressed,
+            actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.refresh,
+                  color: Colors.white,
+                ),
+                onPressed: _handleScanPressed,
+              ),
+            ],
           ),
-        ],
-      ),
-      body: Container(
-        color: Colors.black87,
-        child: Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    isScanning
-                        ? const Column(
-                            children: [
-                              Text(
-                                'Searching for devices',
-                                style: TextStyle(
+          body: Container(
+            color: Colors.black87,
+            child: Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        isScanning
+                            ? const Column(
+                                children: [
+                                  Text(
+                                    'Searching for devices',
+                                    style: TextStyle(
+                                      fontFamily: "Enriqueta",
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    height: 20,
+                                  ),
+                                  CircularProgressIndicator(),
+                                ],
+                              )
+                            : Text(
+                                _deviceStatus(),
+                                style: const TextStyle(
                                   fontFamily: "Enriqueta",
                                   fontSize: 20,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.white,
                                 ),
                               ),
-                              SizedBox(
-                                height: 20,
-                              ),
-                              CircularProgressIndicator(),
-                            ],
-                          )
-                        : Text(
-                            _deviceStatus(),
+                        if (bluetoothController.connectedDevice != null)
+                          const SizedBox(height: 20),
+                        if (bluetoothController.connectedDevice != null)
+                          Text(
+                            'Distance to device: ${(bluetoothController.distance / 100).toStringAsFixed(2)} meters',
                             style: const TextStyle(
                               fontFamily: "Enriqueta",
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
                               color: Colors.white,
                             ),
                           ),
-                    if (bluetoothController.connectedDevice != null)
-                      const SizedBox(height: 20),
-                    if (bluetoothController.connectedDevice != null)
-                      Text(
-                        'Distance to device: ${(bluetoothController.distance / 100).toStringAsFixed(2)} meters',
-                        style: const TextStyle(
-                          fontFamily: "Enriqueta",
-                          fontSize: 18,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
-                        ),
-                      ),
-                    if (bluetoothController.connectedDevice != null)
-                      const SizedBox(height: 20),
-                    if (bluetoothController.connectedDevice != null)
-                      const SizedBox(
-                        width: 150,
-                        height: 150,
-                        child: IndoorPositioning(),
-                      ),
-                    if (bluetoothController.connectedDevice != null)
-                      const SizedBox(
-                        height: 20,
-                      ),
-                    if (bluetoothController.connectedDevice != null)
-                      TextButton.icon(
-                        onPressed: () {
-                          _controlBuzzer(true, shouldPrompt: true);
-                        },
-                        icon: const Icon(Icons.notifications_active),
-                        label: const Text(
-                          "Activate Buzzer",
-                          style: TextStyle(
-                            fontFamily: "Enriqueta",
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
+                        if (bluetoothController.connectedDevice != null)
+                          const SizedBox(height: 20),
+                        if (bluetoothController.connectedDevice != null)
+                          const SizedBox(
+                            width: 150,
+                            height: 150,
+                            child: IndoorPositioning(),
                           ),
-                        ),
-                      ),
-                    if (bluetoothController.connectedDevice != null)
-                      const SizedBox(
-                        height: 20,
-                      ),
-                    if (bluetoothController.connectedDevice != null)
-                      TextButton.icon(
-                        onPressed: () {
-                          _controlBuzzer(false, shouldPrompt: true);
-                        },
-                        icon: const Icon(Icons.notifications_off),
-                        label: const Text(
-                          "Deactivate Buzzer",
-                          style: TextStyle(
-                            fontFamily: "Enriqueta",
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
+                        if (bluetoothController.connectedDevice != null)
+                          const SizedBox(
+                            height: 20,
                           ),
-                        ),
-                      ),
-                    const SizedBox(
-                      height: 20,
-                    ),
-                    TextButton.icon(
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return const AlertDialog(
-                              backgroundColor: Colors.black,
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircularProgressIndicator(),
-                                  SizedBox(height: 16),
-                                  Text(
-                                    "Fetching...",
-                                    style: TextStyle(
-                                      fontFamily: "Enriqueta",
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
+                        if (bluetoothController.connectedDevice != null)
+                          TextButton.icon(
+                            onPressed: () {
+                              _controlBuzzer(true, shouldPrompt: true);
+                            },
+                            icon: const Icon(Icons.notifications_active),
+                            label: const Text(
+                              "Activate Buzzer",
+                              style: TextStyle(
+                                fontFamily: "Enriqueta",
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
                               ),
+                            ),
+                          ),
+                        if (bluetoothController.connectedDevice != null)
+                          const SizedBox(
+                            height: 20,
+                          ),
+                        if (bluetoothController.connectedDevice != null)
+                          TextButton.icon(
+                            onPressed: () {
+                              _controlBuzzer(false, shouldPrompt: true);
+                            },
+                            icon: const Icon(Icons.notifications_off),
+                            label: const Text(
+                              "Deactivate Buzzer",
+                              style: TextStyle(
+                                fontFamily: "Enriqueta",
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(
+                          height: 20,
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return const AlertDialog(
+                                  backgroundColor: Colors.black,
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircularProgressIndicator(),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        "Fetching...",
+                                        style: TextStyle(
+                                          fontFamily: "Enriqueta",
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             );
-                          },
-                        );
 
-                        Future.delayed(const Duration(seconds: 1), () {
-                          Navigator.of(context).pop();
-                          _navigateToGPSScreen();
-                        });
-                      },
-                      icon: const Icon(Icons.navigation),
-                      label: const Text(
-                        "Switch to GPS?",
+                            Future.delayed(const Duration(seconds: 1), () {
+                              Navigator.of(context).pop();
+                              _navigateToGPSScreen();
+                            });
+                          },
+                          icon: const Icon(Icons.navigation),
+                          label: const Text(
+                            "Switch to GPS?",
+                            style: TextStyle(
+                              fontFamily: "Enriqueta",
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                DeviceInfoBottomSheet(
+                  devices: devicesMap.values.toList(),
+                  onDeviceSelected: (selectedDevice) {},
+                  scrollController: null,
+                  rebuildParent: _rebuildFromHomeScreen,
+                  onDeviceRename: updateDeviceName,
+                ),
+                GestureDetector(
+                  onTap: () => _showDeviceInfoBottomSheet(context),
+                  child: Column(
+                    children: [
+                      ScaleTransition(
+                        scale: Tween<double>(
+                          begin: 2.0,
+                          end: 1.2,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: _arrowUpAnimationController,
+                            curve: Curves.easeInOutCubic,
+                          ),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Icon(
+                            Icons.keyboard_arrow_up,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const Text(
+                        'Touch for more options',
                         style: TextStyle(
                           fontFamily: "Enriqueta",
-                          fontSize: 18,
+                          fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: Colors.white,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            DeviceInfoBottomSheet(
-              devices: devicesMap.values.toList(),
-              onDeviceSelected: (selectedDevice) {},
-              scrollController: null,
-              rebuildParent: _rebuildFromHomeScreen,
-              onDeviceRename: updateDeviceName,
-            ),
-            GestureDetector(
-              onTap: () => _showDeviceInfoBottomSheet(context),
-              child: Column(
-                children: [
-                  ScaleTransition(
-                    scale: Tween<double>(
-                      begin: 2.0,
-                      end: 1.2,
-                    ).animate(
-                      CurvedAnimation(
-                        parent: _arrowUpAnimationController,
-                        curve: Curves.easeInOutCubic,
-                      ),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Icon(
-                        Icons.keyboard_arrow_up,
-                        color: Colors.white,
-                      ),
-                    ),
+                    ],
                   ),
-                  const Text(
-                    'Touch for more options',
-                    style: TextStyle(
-                      fontFamily: "Enriqueta",
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          ],
-        ),
-      ),
-    );
+                )
+              ],
+            ),
+          ),
+        ));
   }
 }

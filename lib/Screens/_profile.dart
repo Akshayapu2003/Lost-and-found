@@ -17,229 +17,264 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Obx(
-        () => SingleChildScrollView(
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width,
-            height: MediaQuery.of(context).size.height,
-            child: Stack(
-              children: [
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  width: MediaQuery.of(context).size.width,
-                  height: MediaQuery.of(context).size.height,
-                  child: Image.asset(
-                    'assets/images/landing.jpeg',
-                    fit: BoxFit.none,
-                  ),
-                ),
-                Positioned(
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 439),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color.fromRGBO(17, 17, 17, 0),
-                          Color(0xFF000000),
-                        ],
-                        stops: [0, 0.7969],
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 313),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Color.fromRGBO(17, 17, 17, 0),
-                          Color.fromARGB(255, 0, 0, 0),
-                        ],
-                        stops: [0, 0.0004],
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 210,
-                  left: 20,
-                  child: GestureDetector(
-                    onTap: () {
-                      print('Tapped on profile picture');
-                      userController.pickImage();
-                    },
-                    child: Obx(
-                      () => CircleAvatar(
-                        backgroundImage: userController.image.value != null
-                            ? FileImage(userController.image.value!)
-                            : const AssetImage('assets/images/logo.png')
-                                as ImageProvider,
-                        radius: 43,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 260,
-                  left: 65,
-                  child: IconButton(
+    Future onPop() {
+      return showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Are you sure?'),
+              content: const Text('Are you sure, You want to leave this page?'),
+              actions: [
+                TextButton(
                     onPressed: () {
-                      print('Tapped on edit icon');
-                      userController.pickImage();
+                      Navigator.pop(context, false);
                     },
-                    icon: Container(
-                      height: 29,
-                      width: 29,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color.fromARGB(255, 22, 174, 147),
-                      ),
-                      child: const Icon(
-                        Icons.edit,
-                        color: Color.fromARGB(255, 255, 255, 255),
-                        size: 20,
-                      ),
+                    child: const Text('Never-mind')),
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, true);
+                    },
+                    child: const Text('Leave'))
+              ],
+            );
+          });
+    }
+
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (bool didPop) async {
+        if (didPop) {
+          return;
+        }
+        final bool shouldpop = await onPop() ?? false;
+        if (context.mounted && shouldpop) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        body: Obx(
+          () => SingleChildScrollView(
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.height,
+              child: Stack(
+                children: [
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context).size.height,
+                    child: Image.asset(
+                      'assets/images/landing.jpeg',
+                      fit: BoxFit.none,
                     ),
                   ),
-                ),
-                Positioned(
-                  top: 235,
-                  left: 120,
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          print('Tapped on name');
-                          _nameController.text = userController.name.value;
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              backgroundColor:
-                                  const Color.fromARGB(255, 0, 0, 0),
-                              content: TextField(
-                                controller: _nameController,
-                                onChanged: (newValue) {
-                                  userController.setName(newValue);
-                                },
-                                decoration: const InputDecoration(
-                                  hintText: 'Enter Name',
-                                  hintStyle: TextStyle(color: Colors.white),
-                                ),
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () {
-                                    Get.back();
-                                  },
-                                  child: const Text(
-                                    'Cancel',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () {
-                                    userController
-                                        .setName(_nameController.text);
-                                    Get.back();
-                                  },
-                                  child: const Text('Save'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        child: Obx(
-                          () => Text(
-                            userController.name.value,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontFamily: "Poppins",
-                              fontSize: 23,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            softWrap: true,
-                            overflow: TextOverflow.visible,
-                          ),
+                  Positioned(
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 439),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color.fromRGBO(17, 17, 17, 0),
+                            Color(0xFF000000),
+                          ],
+                          stops: [0, 0.7969],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(
+                    ),
+                  ),
+                  Positioned(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 313),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Color.fromRGBO(17, 17, 17, 0),
+                            Color.fromARGB(255, 0, 0, 0),
+                          ],
+                          stops: [0, 0.0004],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 210,
+                    left: 20,
+                    child: GestureDetector(
+                      onTap: () {
+                        print('Tapped on profile picture');
+                        userController.pickImage();
+                      },
+                      child: Obx(
+                        () => CircleAvatar(
+                          backgroundImage: userController.image.value != null
+                              ? FileImage(userController.image.value!)
+                              : const AssetImage('assets/images/logo.png')
+                                  as ImageProvider,
+                          radius: 43,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 260,
+                    left: 65,
+                    child: IconButton(
+                      onPressed: () {
+                        print('Tapped on edit icon');
+                        userController.pickImage();
+                      },
+                      icon: Container(
+                        height: 29,
+                        width: 29,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color.fromARGB(255, 22, 174, 147),
+                        ),
+                        child: const Icon(
                           Icons.edit,
-                          color: Colors.white,
+                          color: Color.fromARGB(255, 255, 255, 255),
                           size: 20,
                         ),
-                        onPressed: () {
-                          print('Tapped on name edit icon');
-                          _nameController.text = userController.name.value;
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              backgroundColor:
-                                  const Color.fromARGB(255, 0, 0, 0),
-                              content: TextField(
-                                controller: _nameController,
-                                onChanged: (newValue) {
-                                  userController.setName(newValue);
-                                },
-                                decoration: const InputDecoration(
-                                  hintText: 'Enter Name',
-                                  hintStyle: TextStyle(color: Colors.white),
-                                ),
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () {
-                                    Get.back();
-                                  },
-                                  child: const Text(
-                                    'Cancel',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () {
-                                    userController
-                                        .setName(_nameController.text);
-                                    Get.back();
-                                  },
-                                  child: const Text('Save'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
                       ),
-                    ],
+                    ),
                   ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  top: 300,
-                  child: SizedBox(
-                    child: ListView(
+                  Positioned(
+                    top: 235,
+                    left: 120,
+                    child: Row(
                       children: [
-                        buildListTile(
-                            'Phone', userController.phone.value, context),
-                        buildListTile(
-                            'Email', userController.email.value, context),
-                        buildListTile('Feedback', "Give Feedback", context),
-                        buildListTile('SignOut', "SignOut", context),
+                        GestureDetector(
+                          onTap: () {
+                            print('Tapped on name');
+                            _nameController.text = userController.name.value;
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor:
+                                    const Color.fromARGB(255, 0, 0, 0),
+                                content: TextField(
+                                  controller: _nameController,
+                                  onChanged: (newValue) {
+                                    userController.setName(newValue);
+                                  },
+                                  decoration: const InputDecoration(
+                                    hintText: 'Enter Name',
+                                    hintStyle: TextStyle(color: Colors.white),
+                                  ),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () {
+                                      Get.back();
+                                    },
+                                    child: const Text(
+                                      'Cancel',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      userController
+                                          .setName(_nameController.text);
+                                      Get.back();
+                                    },
+                                    child: const Text('Save'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          child: Obx(
+                            () => Text(
+                              userController.name.value,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: "Poppins",
+                                fontSize: 23,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              softWrap: true,
+                              overflow: TextOverflow.visible,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            print('Tapped on name edit icon');
+                            _nameController.text = userController.name.value;
+                            showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor:
+                                    const Color.fromARGB(255, 0, 0, 0),
+                                content: TextField(
+                                  controller: _nameController,
+                                  onChanged: (newValue) {
+                                    userController.setName(newValue);
+                                  },
+                                  decoration: const InputDecoration(
+                                    hintText: 'Enter Name',
+                                    hintStyle: TextStyle(color: Colors.white),
+                                  ),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () {
+                                      Get.back();
+                                    },
+                                    child: const Text(
+                                      'Cancel',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      userController
+                                          .setName(_nameController.text);
+                                      Get.back();
+                                    },
+                                    child: const Text('Save'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    top: 300,
+                    child: SizedBox(
+                      child: ListView(
+                        children: [
+                          buildListTile(
+                              'Phone', userController.phone.value, context),
+                          buildListTile(
+                              'Email', userController.email.value, context),
+                          buildListTile('Feedback', "Give Feedback", context),
+                          buildListTile('SignOut', "SignOut", context),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

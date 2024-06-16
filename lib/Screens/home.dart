@@ -89,36 +89,70 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final targetLatLng =
         userController.currentPosition.value ?? const LatLng(10.1632, 76.6413);
-    return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.black,
-          title: const Text(
-            'Current Location',
-            style: TextStyle(
-              fontFamily: "Enriqueta",
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
+    Future onPop() {
+      return showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Are you sure?'),
+              content: const Text('Are you sure, You want to leave this page?'),
+              actions: [
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, false);
+                    },
+                    child: const Text('Never-mind')),
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, true);
+                    },
+                    child: const Text('Leave'))
+              ],
+            );
+          });
+    }
+
+    return PopScope(
+        canPop: false,
+        onPopInvoked: (bool didPop) async {
+          if (didPop) {
+            return;
+          }
+          final bool shouldpop = await onPop() ?? false;
+          if (context.mounted && shouldpop) {
+            Navigator.pop(context);
+          }
+        },
+        child: Scaffold(
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              title: const Text(
+                'Current Location',
+                style: TextStyle(
+                  fontFamily: "Enriqueta",
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+              elevation: 2,
             ),
-          ),
-          elevation: 2,
-        ),
-        body: GoogleMap(
-          onMapCreated: (controller) {
-            mapController.complete(controller);
-          },
-          initialCameraPosition: CameraPosition(
-            target: targetLatLng,
-            zoom: 5.0,
-          ),
-          markers: {
-            Marker(
-              markerId: const MarkerId('Current Location'),
-              icon: BitmapDescriptor.defaultMarker,
-              position: targetLatLng,
-            ),
-          },
-          myLocationEnabled: true,
-        ));
+            body: GoogleMap(
+              onMapCreated: (controller) {
+                mapController.complete(controller);
+              },
+              initialCameraPosition: CameraPosition(
+                target: targetLatLng,
+                zoom: 5.0,
+              ),
+              markers: {
+                Marker(
+                  markerId: const MarkerId('Current Location'),
+                  icon: BitmapDescriptor.defaultMarker,
+                  position: targetLatLng,
+                ),
+              },
+              myLocationEnabled: true,
+            )));
   }
 }
