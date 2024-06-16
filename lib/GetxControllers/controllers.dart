@@ -7,6 +7,8 @@ class UserController extends GetxController {
   RxString name = ''.obs;
   RxString email = ''.obs;
   RxString phone = ''.obs;
+  RxString pwd = ''.obs;
+
   Rx<File?> image = Rx<File?>(null);
   Rx<LatLng?> currentPosition = Rx<LatLng?>(null);
   RxBool startScanning = false.obs;
@@ -16,6 +18,8 @@ class UserController extends GetxController {
   RxString get gName => name;
   RxString get gemail => email;
   RxString get gPhone => phone;
+  RxString get gpwd => pwd;
+
   File? get gImage => image.value;
   Rx<LatLng?> get gcurrentPosition => currentPosition;
   bool get gstartScanning => false;
@@ -33,6 +37,11 @@ class UserController extends GetxController {
 
   void setPhone(String value) {
     phone.value = value;
+    update();
+  }
+
+  void setPassword(String value) {
+    pwd.value = value;
     update();
   }
 

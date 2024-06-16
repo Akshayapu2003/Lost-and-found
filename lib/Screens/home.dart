@@ -32,43 +32,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _getCurrentLocation() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      showErrorDialog(context,
-          'Location services are disabled. Please enable them.', 'Enable GPS');
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
+    final permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        showErrorDialog(
-            context, 'Location permissions are denied.', 'GPS is disabled');
+      final newPermission = await Geolocator.requestPermission();
+      if (newPermission != LocationPermission.whileInUse &&
+          newPermission != LocationPermission.always) {
         return;
       }
     }
-    if (serviceEnabled) {
-      try {
-        Position positionLowAccuracy = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium,
-        );
-        _updateUserLocation(positionLowAccuracy);
+    if (permission == LocationPermission.deniedForever) {
+      showErrorDialog(
+          context,
+          'Location permissions are permanently denied, we cannot request permissions.',
+          'GPS is disabled');
+      await Geolocator.openAppSettings();
+      return;
+    }
 
-        Position positionHighAccuracy = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
-        _updateUserLocation(positionHighAccuracy);
-        _locationSubscription =
-            Geolocator.getPositionStream().listen(_updateUserLocation);
-      } catch (e) {
-        print('Error: $e');
-        showErrorDialog(
-            context, 'Error getting the current location.', 'Error');
-      }
+    try {
+      Position positionLowAccuracy = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+      _updateUserLocation(positionLowAccuracy);
+
+      Position positionHighAccuracy = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      _updateUserLocation(positionHighAccuracy);
+      _locationSubscription =
+          Geolocator.getPositionStream().listen(_updateUserLocation);
+    } catch (e) {
+      print('Error: $e');
+      showErrorDialog(context, 'Error getting the current location.', 'Error');
     }
   }
 

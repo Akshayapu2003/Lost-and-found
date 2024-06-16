@@ -42,6 +42,7 @@ class LoginScreen extends StatelessWidget {
             userController.setName(name);
             userController.setPhone(phone);
             userController.setEmail(email);
+            userController.setPassword(passwordController.text);
           }
         } else {
           showSnackBar(context, 'Sign-up failed. Please try again.');

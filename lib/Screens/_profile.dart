@@ -1,21 +1,19 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server/gmail.dart';
-import 'package:main/Functions/snackbar.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:main/GetxControllers/controllers.dart';
 import 'package:main/Screens/login.dart';
+import 'package:main/constants/constants.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-import '../GetxControllers/controllers.dart';
 
 class ProfileScreen extends StatelessWidget {
   ProfileScreen({super.key});
 
   final UserController userController = Get.find<UserController>();
 
-  final TextEditingController _textFieldController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -72,12 +70,20 @@ class ProfileScreen extends StatelessWidget {
                 Positioned(
                   top: 210,
                   left: 20,
-                  child: CircleAvatar(
-                    backgroundImage: userController.image.value != null
-                        ? FileImage(userController.image.value!)
-                        : const AssetImage('assets/images/logo.png')
-                            as ImageProvider,
-                    radius: 43,
+                  child: GestureDetector(
+                    onTap: () {
+                      print('Tapped on profile picture');
+                      userController.pickImage();
+                    },
+                    child: Obx(
+                      () => CircleAvatar(
+                        backgroundImage: userController.image.value != null
+                            ? FileImage(userController.image.value!)
+                            : const AssetImage('assets/images/logo.png')
+                                as ImageProvider,
+                        radius: 43,
+                      ),
+                    ),
                   ),
                 ),
                 Positioned(
@@ -85,6 +91,7 @@ class ProfileScreen extends StatelessWidget {
                   left: 65,
                   child: IconButton(
                     onPressed: () {
+                      print('Tapped on edit icon');
                       userController.pickImage();
                     },
                     icon: Container(
@@ -105,75 +112,122 @@ class ProfileScreen extends StatelessWidget {
                 Positioned(
                   top: 235,
                   left: 120,
-                  child: Wrap(
+                  child: Row(
                     children: [
-                      Text(
-                        "${userController.name}",
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontFamily: "Poppins",
-                            fontSize: 23,
-                            fontWeight: FontWeight.w500),
+                      GestureDetector(
+                        onTap: () {
+                          print('Tapped on name');
+                          _nameController.text = userController.name.value;
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor:
+                                  const Color.fromARGB(255, 0, 0, 0),
+                              content: TextField(
+                                controller: _nameController,
+                                onChanged: (newValue) {
+                                  userController.setName(newValue);
+                                },
+                                decoration: const InputDecoration(
+                                  hintText: 'Enter Name',
+                                  hintStyle: TextStyle(color: Colors.white),
+                                ),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
+                                    Get.back();
+                                  },
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    userController
+                                        .setName(_nameController.text);
+                                    Get.back();
+                                  },
+                                  child: const Text('Save'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        child: Obx(
+                          () => Text(
+                            userController.name.value,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontFamily: "Poppins",
+                              fontSize: 23,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            softWrap: true,
+                            overflow: TextOverflow.visible,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          print('Tapped on name edit icon');
+                          _nameController.text = userController.name.value;
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor:
+                                  const Color.fromARGB(255, 0, 0, 0),
+                              content: TextField(
+                                controller: _nameController,
+                                onChanged: (newValue) {
+                                  userController.setName(newValue);
+                                },
+                                decoration: const InputDecoration(
+                                  hintText: 'Enter Name',
+                                  hintStyle: TextStyle(color: Colors.white),
+                                ),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
+                                    Get.back();
+                                  },
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    userController
+                                        .setName(_nameController.text);
+                                    Get.back();
+                                  },
+                                  child: const Text('Save'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ],
-                  ),
-                ),
-                Positioned(
-                  top: 239,
-                  right: 32,
-                  child: IconButton(
-                    onPressed: () {
-                      _textFieldController.text = "${userController.name}";
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: const Color.fromARGB(255, 0, 0, 0),
-                          content: TextField(
-                            controller: _textFieldController,
-                            onChanged: (newValue) {
-                              userController.setName(newValue);
-                            },
-                            decoration: const InputDecoration(
-                              hintText: 'Enter Name',
-                              hintStyle: TextStyle(color: Colors.white),
-                            ),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Get.back();
-                              },
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                Get.back();
-                              },
-                              child: const Text('Save'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.edit),
-                    color: Colors.white,
                   ),
                 ),
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
-                  top: MediaQuery.of(context).size.height * 0.03,
+                  top: 300,
                   child: SizedBox(
-                    height: MediaQuery.of(context).size.height -
-                        MediaQuery.of(context).size.height * 0.33 -
-                        70,
                     child: ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 300),
                       children: [
                         buildListTile(
                             'Phone', userController.phone.value, context),
@@ -216,103 +270,36 @@ class ProfileScreen extends StatelessWidget {
       default:
         iconData = Icons.info;
     }
-    _textFieldController.text = "";
-    if (title.toLowerCase() != 'signout' && title.toLowerCase() != 'feedback') {
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Container(
-          color: const Color.fromARGB(255, 42, 39, 39).withOpacity(0.3),
-          child: ListTile(
-            leading: Icon(
-              iconData,
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Container(
+        color: const Color.fromARGB(255, 30, 28, 28).withOpacity(0.3),
+        child: ListTile(
+          leading: Icon(
+            iconData,
+            color: Colors.white,
+          ),
+          title: Text(
+            title.toLowerCase() != 'signout' &&
+                    title.toLowerCase() != 'feedback'
+                ? value
+                : title,
+            style: const TextStyle(
               color: Colors.white,
-            ),
-            title: Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontFamily: 'Enriqueta',
-                fontSize: 14.55,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            onTap: onTap,
-            trailing: IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    backgroundColor: const Color.fromARGB(255, 0, 0, 0),
-                    content: TextField(
-                      controller: _textFieldController,
-                      onChanged: (newValue) {
-                        value = newValue;
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Enter new $title',
-                        hintStyle: const TextStyle(color: Colors.white),
-                      ),
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Get.back();
-                        },
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          switch (title.toLowerCase()) {
-                            case 'phone':
-                              userController.setPhone(value);
-                              break;
-                            case 'email':
-                              userController.setEmail(value);
-                              break;
-                            default:
-                              break;
-                          }
-                          Get.back();
-                        },
-                        child: const Text('Save'),
-                      ),
-                    ],
-                  ),
-                );
-              },
+              fontFamily: 'Enriqueta',
+              fontSize: 14.55,
+              fontWeight: FontWeight.w500,
             ),
           ),
+          onTap: () {
+            if (onTap != null) {
+              print('Tapped on $title');
+              onTap();
+            }
+          },
         ),
-      );
-    } else {
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Container(
-          color: const Color.fromARGB(255, 42, 39, 39).withOpacity(0.3),
-          child: ListTile(
-            leading: Icon(
-              iconData,
-              color: Colors.white,
-            ),
-            title: Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontFamily: 'Enriqueta',
-                fontSize: 14.55,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            onTap: onTap,
-          ),
-        ),
-      );
-    }
+      ),
+    );
   }
 
   Future<void> logout(BuildContext context) async {
@@ -325,11 +312,13 @@ class ProfileScreen extends StatelessWidget {
         phone: userController.phone.value,
       );
     } catch (e) {
+      print('Error logging out: $e');
       showSnackBar(context, 'Error logging out: $e');
     }
   }
 
   void _launchPhone(String phoneNumber) async {
+    print('Launching phone call to $phoneNumber');
     final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
     if (await canLaunchUrlString(phoneUri.toString())) {
       await launchUrlString(phoneUri.toString());
@@ -339,6 +328,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _launchEmail(String emailAddress) async {
+    print('Launching email composer for $emailAddress');
     final Uri emailLaunchUri = Uri(
         scheme: 'mailto',
         path: emailAddress,
@@ -356,6 +346,7 @@ class ProfileScreen extends StatelessWidget {
     required String phone,
   }) async {
     try {
+      print('Saving user data to database');
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         await Firebase.initializeApp();
@@ -376,8 +367,9 @@ class ProfileScreen extends StatelessWidget {
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color.fromARGB(255, 0, 0, 0),
-        title: const Text('Give Feedback'),
+        backgroundColor: kDialogBackgroundColor,
+        title:
+            const Text('Give Feedback', style: TextStyle(color: Colors.white)),
         content: TextField(
           onChanged: (text) {
             feedback = text;
@@ -400,7 +392,8 @@ class ProfileScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              _sendFeedbackByEmail(feedback, context);
+              print('Submitting feedback: $feedback');
+              submitFeedback(feedback, context);
               Navigator.pop(context);
             },
             child: const Text('Send'),
@@ -410,29 +403,42 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _sendFeedbackByEmail(
-      String feedback, BuildContext context) async {
-    final smtpServer = gmail('your.email@gmail.com', 'your_password');
-
-    final message = Message()
-      ..from = Address(userController.email.value, userController.name.value)
-      ..recipients.add('akshaya4703@gmail.com')
-      ..subject = 'Feedback'
-      ..text = feedback;
-
+  Future<void> submitFeedback(String feedback, BuildContext context) async {
     try {
-      final sendReport = await send(message, smtpServer);
-      print('Message sent: ' + sendReport.toString());
-      showSnackBar(context, 'Feedback sent successfully!');
+      print('Submitting feedback to database');
+      final user = FirebaseAuth.instance.currentUser;
+      final database = FirebaseDatabase.instance.ref();
+      if (user != null) {
+        await database.child('feedback').push().set({
+          'userId': user.uid,
+          'name': userController.name.value,
+          'email': userController.email.value,
+          'feedback': feedback,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+        showSnackBar(
+          context,
+          'Thank you for your feedback!',
+        );
+      }
     } catch (e) {
-      print('Error sending feedback: $e');
-      showSnackBar(context, 'Failed to send feedback. Please try again later.');
+      print('Error submitting feedback: $e');
+      Get.snackbar('Error', 'Failed to submit feedback: $e',
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: kSnackbarBackgroundColor,
+          colorText: Colors.white);
     }
   }
 
   void showSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-    ));
+    print('Showing snackbar: $message');
+    Get.snackbar(
+      'Feedback',
+      message,
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: kSnackbarBackgroundColor,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 5),
+    );
   }
 }

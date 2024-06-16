@@ -162,7 +162,7 @@ class DeviceInfoBottomSheet extends StatelessWidget {
                           color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3F51B5),
+                      backgroundColor: const Color.fromRGBO(63, 81, 181, 1),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),

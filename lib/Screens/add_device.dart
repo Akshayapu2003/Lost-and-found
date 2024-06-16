@@ -47,7 +47,7 @@ class AddDeviceBottomSheet extends StatelessWidget {
               Get.back();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: const Color.fromRGBO(63, 81, 181, 1),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -56,10 +56,10 @@ class AddDeviceBottomSheet extends StatelessWidget {
             child: const Text(
               'Scan for Devices',
               style: TextStyle(
-                fontFamily: "Enriqueta",
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+                  fontFamily: "Enriqueta",
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
             ),
           ),
         ],

@@ -77,6 +77,7 @@ class _ItemScreenState extends State<ItemScreen>
   List<double>? accelerometerValues;
   List<double>? gyroscopeValues;
   double distance = 0.0;
+  bool isConnecting = false;
   bool isBuzzerOn = false;
   bool isScanning = false;
   bool isBluetoothPermissionGranted = false;
@@ -269,6 +270,9 @@ class _ItemScreenState extends State<ItemScreen>
   }
 
   Future<void> _connectToDevice(BluetoothDevice device, int rssi) async {
+    setState(() {
+      isConnecting = true;
+    });
     try {
       await device.connect();
       _connectedDevice = device;
@@ -375,6 +379,10 @@ class _ItemScreenState extends State<ItemScreen>
           context,
           'Failed to connect to the device. Please try again.',
           'Connection Error');
+    } finally {
+      setState(() {
+        isConnecting = false;
+      });
     }
   }
 
@@ -382,7 +390,9 @@ class _ItemScreenState extends State<ItemScreen>
     String? password;
     await Get.defaultDialog<String>(
       title: 'Enter Password',
+      titleStyle: const TextStyle(color: kDialogTextColor),
       middleText: 'Please enter the password for this device.',
+      middleTextStyle: const TextStyle(color: kDialogTextColor),
       textConfirm: 'Submit',
       textCancel: 'Cancel',
       confirmTextColor: kDialogTextColor,
@@ -414,7 +424,9 @@ class _ItemScreenState extends State<ItemScreen>
     String? password;
     await Get.defaultDialog<String>(
       title: 'Set Password',
+      titleStyle: const TextStyle(color: kDialogTextColor),
       middleText: 'Please set a new password for this device.',
+      middleTextStyle: const TextStyle(color: kDialogTextColor),
       textConfirm: 'Submit',
       textCancel: 'Cancel',
       confirmTextColor: kDialogTextColor,
@@ -514,7 +526,9 @@ class _ItemScreenState extends State<ItemScreen>
     return Get.defaultDialog<bool>(
       buttonColor: kDialogBackgroundColor,
       title: 'Activate Buzzer',
+      titleStyle: const TextStyle(color: kDialogTextColor),
       middleText: 'Do you want to activate the buzzer?',
+      middleTextStyle: const TextStyle(color: kDialogTextColor),
       textConfirm: 'Yes',
       textCancel: 'No',
       confirmTextColor: kDialogTextColor,
@@ -530,7 +544,9 @@ class _ItemScreenState extends State<ItemScreen>
     return Get.defaultDialog<bool>(
       buttonColor: kDialogBackgroundColor,
       title: 'Deactivate Buzzer',
+      titleStyle: const TextStyle(color: kDialogTextColor),
       middleText: 'Do you want to deactivate the buzzer?',
+      middleTextStyle: const TextStyle(color: kDialogTextColor),
       textConfirm: 'Yes',
       textCancel: 'No',
       confirmTextColor: kDialogTextColor,
@@ -564,7 +580,7 @@ class _ItemScreenState extends State<ItemScreen>
       snackPosition: SnackPosition.TOP,
       backgroundColor: kSnackbarBackgroundColor,
       colorText: kSnackbarTextColor,
-      duration: const Duration(seconds: 5),
+      duration: const Duration(seconds: 3),
     );
   }
 
@@ -648,6 +664,7 @@ class _ItemScreenState extends State<ItemScreen>
         print('Error disconnecting device: $e');
       }
     }
+
     setState(() {
       bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
       uniqueId = '';
@@ -657,7 +674,6 @@ class _ItemScreenState extends State<ItemScreen>
       distance = 0.0;
       isBuzzerOn = false;
       esp32RSSI = 0;
-      isScanning = true;
     });
 
     scanSubscription?.cancel();
@@ -702,47 +718,64 @@ class _ItemScreenState extends State<ItemScreen>
           maxChildSize: 0.8,
           expand: false,
           builder: (context, scrollController) {
-            return DeviceInfoBottomSheet(
-              devices: devicesMap.values.toList(),
-              onDeviceSelected: (selectedDevice) {
-                String selectedDeviceMacAddress = selectedDevice['macAddress'];
-                BluetoothDevice? deviceToConnect;
-                bool isDeviceNearby = false;
-                StreamSubscription<ScanResult>? scanSubscription =
-                    flutterBlue.scan().listen((scanResult) {
-                  if (scanResult.device.id.id == selectedDeviceMacAddress) {
-                    deviceToConnect = scanResult.device;
-                    isDeviceNearby = true;
-                  }
-                }, cancelOnError: true);
-                Future.delayed(const Duration(seconds: 5), () {
-                  scanSubscription.cancel();
-
-                  if (isDeviceNearby) {
-                    _connectToSpecificDevice(
-                        deviceToConnect!, selectedDevice['rssi'] ?? 0);
-                  } else {
-                    Get.snackbar(
-                      'Device Not Found',
-                      'The selected device is not nearby or not discoverable.',
-                      snackPosition: SnackPosition.TOP,
-                      backgroundColor: const Color.fromARGB(255, 132, 129, 129)
-                          .withOpacity(0.8),
-                      colorText: Colors.white,
-                      duration: const Duration(seconds: 3),
-                    );
-                  }
-                  Navigator.of(context).pop();
-                });
-              },
-              scrollController: scrollController,
-              rebuildParent: _rebuildFromHomeScreen,
-              onDeviceRename: updateDeviceName,
+            return GestureDetector(
+              child: DeviceInfoBottomSheet(
+                devices: devicesMap.values.toList(),
+                onDeviceSelected: (selectedDevice) {
+                  _connectToSelectedDevice(selectedDevice);
+                },
+                onDeviceRename: updateDeviceName,
+                scrollController: scrollController,
+                rebuildParent: _rebuildFromHomeScreen,
+              ),
             );
           },
         );
       },
     );
+  }
+
+  Future<void> _connectToSelectedDevice(
+      Map<String, dynamic> selectedDevice) async {
+    String selectedDeviceMacAddress = selectedDevice['macAddress'];
+    BluetoothDevice? deviceToConnect;
+
+    StreamSubscription<ScanResult>? scanSubscription;
+    bool isDeviceNearby = false;
+    final stopwatch = Stopwatch()..start();
+    Get.snackbar(
+      'Trying to connect',
+      'Make sure that the selected device is nearby or discoverable.',
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: kSnackbarBackgroundColor,
+      colorText: kSnackbarTextColor,
+      duration: const Duration(seconds: 3),
+    );
+    scanSubscription = flutterBlue.scan().listen((scanResult) {
+      if (scanResult.device.id.id == selectedDeviceMacAddress) {
+        deviceToConnect = scanResult.device;
+        isDeviceNearby = true;
+        scanSubscription?.cancel();
+      }
+    });
+
+    await Future.delayed(const Duration(seconds: 15));
+    stopwatch.stop();
+
+    if (isDeviceNearby) {
+      _connectToSpecificDevice(deviceToConnect!, selectedDevice['rssi'] ?? 0);
+    } else {
+      Get.snackbar(
+        'Device Not Found',
+        'The selected device is not nearby or not discoverable.',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: kSnackbarBackgroundColor,
+        colorText: kSnackbarTextColor,
+        duration: const Duration(seconds: 3),
+      );
+    }
+
+    scanSubscription.cancel();
   }
 
   void _connectToSpecificDevice(BluetoothDevice device, int rssi) async {
@@ -761,6 +794,18 @@ class _ItemScreenState extends State<ItemScreen>
   void updateDeviceName(String newName, String macAddress) {
     final deviceRef = databaseRef.child('devices/$macAddress');
     deviceRef.update({'name': newName});
+  }
+
+  String _deviceStatus() {
+    if (isScanning) {
+      return 'Searching for devices';
+    } else if (isConnecting) {
+      return 'Extracting...';
+    } else if (bluetoothController.connectedDevice != null) {
+      return 'Device: ${bluetoothController.connectedDevice!.name}';
+    } else {
+      return 'No device found';
+    }
   }
 
   @override
@@ -816,7 +861,7 @@ class _ItemScreenState extends State<ItemScreen>
                             ],
                           )
                         : Text(
-                            'Device: ${bluetoothController.connectedDevice?.name}',
+                            _deviceStatus(),
                             style: const TextStyle(
                               fontFamily: "Enriqueta",
                               fontSize: 20,
