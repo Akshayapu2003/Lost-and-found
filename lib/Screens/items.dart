@@ -230,49 +230,58 @@ class _ItemScreenState extends State<ItemScreen>
     if (device.name == 'ESP32-BLE-Server' &&
         bluetoothController.connectedDevice == null) {
       _connectToDevice(device, scanResult.rssi);
-      scanSubscription?.cancel(); // Stop scanning once we find our device
-      setState(() {
-        isScanning = false;
-      });
+      bluetoothStateSubscription?.cancel();
+      if (mounted) {
+        setState(() {
+          isScanning = false;
+        });
+      }
     }
   }
 
   void startScan() {
     print('startScan() called');
     _stopScan();
-
-    setState(() {
-      isScanning = true;
-    });
-
+    if (mounted) {
+      setState(() {
+        isScanning = true;
+      });
+    }
     scanSubscription =
-        flutterBlue.scan(timeout: const Duration(seconds: 10)).listen(
+        flutterBlue.scan(timeout: const Duration(seconds: 20)).listen(
       (scanResult) {
         print('Device found: ${scanResult.device.name}');
         _handleScanResult(scanResult);
       },
       onDone: () {
         print('Scan finished');
-        setState(() {
-          isScanning = false;
-          if (bluetoothController.connectedDevice == null) {
-            bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
-          }
-        });
+        if (mounted) {
+          setState(() {
+            isScanning = false;
+            if (bluetoothController.connectedDevice == null) {
+              bluetoothController.updateConnectedDevice(
+                  null, null, null, 0, 0.0);
+            }
+          });
+        }
       },
       onError: (error) {
         print('Error during scanning: $error');
-        setState(() {
-          isScanning = false;
-        });
+        if (mounted) {
+          setState(() {
+            isScanning = false;
+          });
+        }
       },
     );
   }
 
   Future<void> _connectToDevice(BluetoothDevice device, int rssi) async {
-    setState(() {
-      isConnecting = true;
-    });
+    if (mounted) {
+      setState(() {
+        isConnecting = true;
+      });
+    }
     try {
       await device.connect();
       _connectedDevice = device;
@@ -380,9 +389,11 @@ class _ItemScreenState extends State<ItemScreen>
           'Failed to connect to the device. Please try again.',
           'Connection Error');
     } finally {
-      setState(() {
-        isConnecting = false;
-      });
+      if (mounted) {
+        setState(() {
+          isConnecting = false;
+        });
+      }
     }
   }
 
@@ -655,7 +666,6 @@ class _ItemScreenState extends State<ItemScreen>
 
   void _handleScanPressed({bool fromBottomSheet = false}) async {
     print('_handleScanPressed called, fromBottomSheet: $fromBottomSheet');
-    _stopScan();
     if (bluetoothController.connectedDevice != null) {
       try {
         await bluetoothController.connectedDevice!.disconnect();
@@ -664,23 +674,24 @@ class _ItemScreenState extends State<ItemScreen>
         print('Error disconnecting device: $e');
       }
     }
+    if (mounted) {
+      setState(() {
+        bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
+        uniqueId = '';
+        enabled = true;
+        accelerometerValues = null;
+        gyroscopeValues = null;
+        distance = 0.0;
+        isBuzzerOn = false;
+        esp32RSSI = 0;
+        isScanning = true;
+      });
+    }
 
-    setState(() {
-      bluetoothController.updateConnectedDevice(null, null, null, 0, 0.0);
-      uniqueId = '';
-      enabled = true;
-      accelerometerValues = null;
-      gyroscopeValues = null;
-      distance = 0.0;
-      isBuzzerOn = false;
-      esp32RSSI = 0;
-    });
-
-    scanSubscription?.cancel();
+    _stopScan();
     bluetoothStateSubscription?.cancel();
     _timer.cancel();
 
-    _bluetoothSetupManager.initialize(context);
     _streamSensorData();
     _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       _updateDistance();
